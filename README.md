@@ -1,5 +1,10 @@
 # Atlassian MCP Server
 
+<a href="https://glama.ai/mcp/servers/@tingyiy/atlassian-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@tingyiy/atlassian-mcp-server/badge" />
+</a>
+
+
 A Model Context Protocol (MCP) server that provides powerful tools for interacting with Atlassian Jira and Confluence Cloud. Built with Python and the `mcp` SDK.
 
 This server enables LLM agents (like Claude Desktop) to:
