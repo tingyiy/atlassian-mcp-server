@@ -1,29 +1,46 @@
 {
-  "name": "atlassian-mcp-server",
-  "version": "0.1.0",
-  "description": "An open-source Model Context Protocol (MCP) server for Atlassian Jira and Confluence Cloud.",
-  "license": "MIT",
-  "homepage": "https://github.com/tingyiy/atlassian-mcp-server",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/tingyiy/atlassian-mcp-server.git"
-  },
-  "runtime": "python",
-  "entrypoint": {
-    "type": "stdio",
-    "command": "python",
-    "args": ["server.py"]
-  },
-  "env": [
-    "ATLASSIAN_USERNAME",
-    "ATLASSIAN_API_KEY",
-    "JIRA_URL",
-    "CONFLUENCE_URL",
-    "CONFLUENCE_SPACE_KEY"
-  ],
-  "dependencies": [
-    "mcp",
-    "httpx",
-    "python-dotenv"
-  ]
+    "name": "atlassian-mcp-server",
+    "version": "0.1.0",
+    "description": "An open-source Model Context Protocol (MCP) server for Atlassian Jira and Confluence Cloud.",
+    "license": "MIT",
+    "homepage": "https://github.com/tingyiy/atlassian-mcp-server",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/tingyiy/atlassian-mcp-server.git"
+    },
+    "runtime": "python",
+    "entrypoint": {
+        "type": "stdio",
+        "command": "python",
+        "args": [
+            "server.py"
+        ]
+    },
+    "env": {
+        "ATLASSIAN_USERNAME": {
+            "description": "Atlassian account email address",
+            "required": true
+        },
+        "ATLASSIAN_API_KEY": {
+            "description": "Atlassian API Token",
+            "required": true
+        },
+        "JIRA_URL": {
+            "description": "Jira Cloud API Base URL (e.g. https://domain.atlassian.net/rest/api/3)",
+            "required": true
+        },
+        "CONFLUENCE_URL": {
+            "description": "Confluence Cloud Base URL (e.g. https://domain.atlassian.net/wiki)",
+            "required": true
+        },
+        "CONFLUENCE_SPACE_KEY": {
+            "description": "Default Confluence Space Key",
+            "required": false
+        }
+    },
+    "dependencies": [
+        "mcp",
+        "httpx",
+        "python-dotenv"
+    ]
 }
