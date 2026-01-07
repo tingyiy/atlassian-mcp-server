@@ -92,6 +92,26 @@ class JiraClient:
             response.raise_for_status()
             return response.json()
 
+    async def get_comments(self, issue_key: str) -> List[Dict[str, Any]]:
+        """Gets all comments for an issue."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/issue/{issue_key}/comment",
+                headers=self.auth_header
+            )
+            response.raise_for_status()
+            data = response.json()
+            return [
+                {
+                    "id": comment.get("id"),
+                    "author": (comment.get("author") or {}).get("displayName", "Unknown"),
+                    "created": comment.get("created"),
+                    "body": comment.get("body")  # This is ADF format
+                }
+                for comment in data.get("comments", [])
+            ]
+
+
     async def get_transitions(self, issue_key: str) -> List[Dict[str, Any]]:
         """Gets available transitions for an issue."""
         async with httpx.AsyncClient() as client:

@@ -19,6 +19,7 @@ This server enables LLM agents (like Claude Desktop) to:
 - `jira_create_issue`: Create new issues (Support for Projects, Issue Types, and ADF Descriptions).
 - `jira_update_issue`: Update issue summary and description.
 - `jira_add_comment`: Add comments to issues.
+- `jira_get_comments`: Retrieve all comments on an issue.
 - `jira_transition_issue`: Move issues through their workflow (e.g., To Do -> Done).
 
 ### Confluence Tools
@@ -29,6 +30,7 @@ This server enables LLM agents (like Claude Desktop) to:
   - *Note*: Includes guidance for handling Mermaid diagrams via the Mermaid Diagrams plugin.
 - `confluence_delete_page`: Delete a Confluence page.
 - `confluence_search`: Perform advanced searches using CQL (Confluence Query Language).
+- `confluence_get_comments`: Retrieve all comments on a page.
 
 ## Prerequisites
 

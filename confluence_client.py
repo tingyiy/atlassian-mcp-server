@@ -171,3 +171,23 @@ class ConfluenceClient:
                 }
                 for page in data.get("results", [])
             ]
+
+    async def get_comments(self, page_id: str) -> List[Dict[str, Any]]:
+        """Gets all comments for a Confluence page."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.api_base}/content/{page_id}/child/comment",
+                params={"expand": "body.storage,version"},
+                headers=self.auth_header
+            )
+            response.raise_for_status()
+            data = response.json()
+            return [
+                {
+                    "id": comment.get("id"),
+                    "author": (comment.get("version") or {}).get("by", {}).get("displayName", "Unknown"),
+                    "created": (comment.get("version") or {}).get("when"),
+                    "body": (comment.get("body") or {}).get("storage", {}).get("value", "")
+                }
+                for comment in data.get("results", [])
+            ]

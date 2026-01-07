@@ -175,6 +175,20 @@ async def jira_create_issue(project_key: str, summary: str, description: Any = N
         return f"Error: {e}"
 
 @mcp.tool()
+async def jira_get_comments(issue_key: str) -> str:
+    """Gets all comments for a Jira issue."""
+    logger.info(f"Tool called: jira_get_comments(issue_key='{issue_key}')")
+    if not jira:
+        logger.error("Jira client not initialized")
+        return "Jira client not initialized. Check configuration."
+    try:
+        comments = await jira.get_comments(issue_key)
+        return json.dumps(comments, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting comments for {issue_key}: {e}")
+        return f"Error: {e}"
+
+@mcp.tool()
 async def list_confluence_pages(space_key: str = None, limit: int = 25) -> str:
     """Lists Confluence pages in a space."""
     logger.info(f"Tool called: list_confluence_pages(space_key='{space_key}', limit={limit})")
@@ -282,6 +296,20 @@ async def confluence_search(cql: str, limit: int = 25) -> str:
         return json.dumps(results, indent=2)
     except Exception as e:
         logger.error(f"Error searching Confluence: {e}")
+        return f"Error: {e}"
+
+@mcp.tool()
+async def confluence_get_comments(page_id: str) -> str:
+    """Gets all comments for a Confluence page."""
+    logger.info(f"Tool called: confluence_get_comments(page_id='{page_id}')")
+    if not confluence:
+        logger.error("Confluence client not initialized")
+        return "Confluence client not initialized. Check configuration."
+    try:
+        comments = await confluence.get_comments(page_id)
+        return json.dumps(comments, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting comments for page {page_id}: {e}")
         return f"Error: {e}"
 
 if __name__ == "__main__":
