@@ -190,6 +190,26 @@ async def jira_get_comments(issue_key: str) -> str:
         return f"Error: {e}"
 
 @mcp.tool()
+async def jira_download_attachment(attachment_id: str) -> str:
+    """Downloads an attachment from Jira by its ID and returns the base64 encoded content."""
+    logger.info(f"Tool called: jira_download_attachment(attachment_id='{attachment_id}')")
+    if not jira:
+        logger.error("Jira client not initialized")
+        return "Jira client not initialized. Check configuration."
+    try:
+        import base64
+        image_data = await jira.download_attachment(attachment_id)
+        if not image_data:
+            return f"Error: Attachment {attachment_id} could not be downloaded."
+            
+        # Return as base64 string for embedding/processing
+        base64_str = base64.b64encode(image_data).decode('utf-8')
+        return f"Attachment found. Base64 Content: {base64_str}"
+    except Exception as e:
+        logger.error(f"Error downloading attachment {attachment_id}: {e}")
+        return f"Error: {e}"
+
+@mcp.tool()
 async def list_confluence_pages(space_key: str = None, limit: int = 25) -> str:
     """Lists Confluence pages in a space."""
     logger.info(f"Tool called: list_confluence_pages(space_key='{space_key}', limit={limit})")
@@ -329,6 +349,26 @@ async def confluence_add_comment(page_id: str, body: str, parent_comment_id: str
         return f"Comment added successfully. ID: {comment_id}"
     except Exception as e:
         logger.error(f"Error adding comment to page {page_id}: {e}")
+        return f"Error: {e}"
+
+@mcp.tool()
+async def confluence_get_attachment_image(page_id: str, filename: str) -> str:
+    """Gets the base64 encoded string of an image attachment on a Confluence page."""
+    logger.info(f"Tool called: confluence_get_attachment_image(page_id='{page_id}', filename='{filename}')")
+    if not confluence:
+        logger.error("Confluence client not initialized")
+        return "Confluence client not initialized. Check configuration."
+    try:
+        import base64
+        image_data = await confluence.get_attachment_image(page_id, filename)
+        if not image_data:
+            return f"Error: Attachment '{filename}' not found on page {page_id}."
+            
+        # Return as base64 string for embedding/processing
+        base64_str = base64.b64encode(image_data).decode('utf-8')
+        return f"Image found. Base64 Content: {base64_str}"
+    except Exception as e:
+        logger.error(f"Error getting attachment {filename} from page {page_id}: {e}")
         return f"Error: {e}"
 
 if __name__ == "__main__":

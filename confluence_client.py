@@ -219,3 +219,38 @@ class ConfluenceClient:
             )
             response.raise_for_status()
             return response.json()
+
+    async def get_attachment_image(self, page_id: str, filename: str) -> Optional[bytes]:
+        """Gets the binary content of an image attachment on a page."""
+        async with httpx.AsyncClient() as client:
+            # 1. Find the attachment ID by filename
+            search_url = f"{self.api_base}/content/{page_id}/child/attachment"
+            response = await client.get(
+                search_url,
+                params={"filename": filename, "expand": "version"},
+                headers=self.auth_header
+            )
+            response.raise_for_status()
+            data = response.json()
+            results = data.get("results", [])
+            
+            if not results:
+                return None
+            
+            # 2. Get the download URL (API v1 style)
+            # The download path is usually relative, e.g., /wiki/download/attachments/...
+            attachment = results[0]
+            download_path = attachment.get("_links", {}).get("download")
+            if not download_path:
+                return None
+                
+            # Construct full URL. self.api_base is .../wiki/rest/api, so we need base .../wiki
+            # If api_base is "https://domain.atlassian.net/wiki/rest/api", split at /rest
+            base_url = self.api_base.split("/rest")[0] 
+            full_download_url = f"{base_url}{download_path}"
+
+            # 3. Download the binary content
+            img_response = await client.get(full_download_url, headers=self.auth_header)
+            img_response.raise_for_status()
+            return img_response.content
+

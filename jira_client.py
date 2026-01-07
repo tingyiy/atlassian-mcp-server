@@ -137,6 +137,30 @@ class JiraClient:
             )
             response.raise_for_status()
 
+    async def download_attachment(self, attachment_id: str) -> Optional[bytes]:
+        """Downloads an attachment by ID."""
+        async with httpx.AsyncClient() as client:
+            # The standard endpoint for content is /rest/api/3/attachment/content/{id}
+            # However, sometimes we need to follow the 'content' link from metadata.
+            # But usually, directly accessing the content URL works if we know the ID.
+            # The robust way: GET /rest/api/3/attachment/{id} to get metadata (including secure content URL)
+            
+            meta_response = await client.get(
+                f"{self.base_url}/attachment/{attachment_id}",
+                headers=self.auth_header
+            )
+            meta_response.raise_for_status()
+            metadata = meta_response.json()
+            
+            content_url = metadata.get("content")
+            if not content_url:
+                return None
+                
+            img_response = await client.get(content_url, headers=self.auth_header, follow_redirects=True)
+            img_response.raise_for_status()
+            return img_response.content
+
+
     async def update_issue(self, issue_key: str, fields: Dict[str, Any]) -> None:
         """Updates fields of an issue."""
         async with httpx.AsyncClient() as client:
