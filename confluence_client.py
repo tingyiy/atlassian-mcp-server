@@ -191,3 +191,31 @@ class ConfluenceClient:
                 }
                 for comment in data.get("results", [])
             ]
+
+    async def add_comment(self, page_id: str, body: str, parent_comment_id: Optional[str] = None) -> Dict[str, Any]:
+        """Adds a comment to a Confluence page. Optionally replies to an existing comment."""
+        async with httpx.AsyncClient() as client:
+            payload = {
+                "type": "comment",
+                "container": {
+                    "type": "page",
+                    "id": page_id
+                },
+                "body": {
+                    "storage": {
+                        "value": f"<p>{body}</p>",
+                        "representation": "storage"
+                    }
+                }
+            }
+            # If replying to a comment, set the ancestor
+            if parent_comment_id:
+                payload["ancestors"] = [{"id": parent_comment_id}]
+            
+            response = await client.post(
+                f"{self.api_base}/content",
+                json=payload,
+                headers=self.auth_header
+            )
+            response.raise_for_status()
+            return response.json()

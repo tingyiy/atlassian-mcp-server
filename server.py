@@ -313,5 +313,23 @@ async def confluence_get_comments(page_id: str) -> str:
         logger.error(f"Error getting comments for page {page_id}: {e}")
         return f"Error: {e}"
 
+@mcp.tool()
+async def confluence_add_comment(page_id: str, body: str, parent_comment_id: str = None) -> str:
+    """Adds a comment to a Confluence page. 
+    Set parent_comment_id to reply to an existing comment.
+    """
+    logger.info(f"Tool called: confluence_add_comment(page_id='{page_id}', parent_comment_id={parent_comment_id})")
+    if not confluence:
+        logger.error("Confluence client not initialized")
+        return "Confluence client not initialized. Check configuration."
+    try:
+        result = await confluence.add_comment(page_id, body, parent_comment_id)
+        comment_id = result.get('id')
+        logger.info(f"Comment added: {comment_id}")
+        return f"Comment added successfully. ID: {comment_id}"
+    except Exception as e:
+        logger.error(f"Error adding comment to page {page_id}: {e}")
+        return f"Error: {e}"
+
 if __name__ == "__main__":
     mcp.run()
