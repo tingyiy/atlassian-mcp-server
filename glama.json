@@ -1,0 +1,6 @@
+{
+    "$schema": "https://glama.ai/mcp-server-config.schema.json",
+    "maintainers": [
+        "tingyiy"
+    ]
+}
