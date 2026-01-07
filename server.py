@@ -1,6 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 from jira_client import JiraClient
 from confluence_client import ConfluenceClient
+import json
 import logging
 import sys
 from typing import Any
