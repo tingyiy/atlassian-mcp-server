@@ -222,20 +222,20 @@ async def jira_get_comments(issue_key: str) -> str:
         return f"Error: {e}"
 
 @mcp.tool()
-async def jira_download_attachment(attachment_id: str) -> Image:
-    """Downloads an attachment from Jira by its ID and returns it as an Image."""
-    logger.info(f"Tool called: jira_download_attachment(attachment_id='{attachment_id}')")
+async def jira_get_attachment_image(attachment_id: str) -> Image:
+    """Gets an image attachment from Jira by its ID and returns it as an Image."""
+    logger.info(f"Tool called: jira_get_attachment_image(attachment_id='{attachment_id}')")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
     try:
-        image_data = await jira.download_attachment(attachment_id)
+        image_data = await jira.get_attachment_content(attachment_id)
         if not image_data:
             return f"Error: Attachment {attachment_id} could not be downloaded."
             
         return Image(data=image_data, format='png')
     except Exception as e:
-        logger.error(f"Error downloading attachment {attachment_id}: {e}")
+        logger.error(f"Error getting attachment {attachment_id}: {e}")
         return f"Error: {e}"
 
 @mcp.tool()

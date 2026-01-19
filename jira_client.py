@@ -146,8 +146,8 @@ class JiraClient:
             )
             response.raise_for_status()
 
-    async def download_attachment(self, attachment_id: str) -> Optional[bytes]:
-        """Downloads an attachment by ID."""
+    async def get_attachment_content(self, attachment_id: str) -> Optional[bytes]:
+        """Gets attachment content by ID."""
         async with httpx.AsyncClient() as client:
             # The standard endpoint for content is /rest/api/3/attachment/content/{id}
             # However, sometimes we need to follow the 'content' link from metadata.
