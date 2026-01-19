@@ -75,7 +75,15 @@ async def read_jira_issue(issue_key: str) -> str:
             "updated": fields.get("updated"),
             "description": fields.get("description"),  # ADF format
             "labels": fields.get("labels", []),
-            "attachment_count": len(fields.get("attachment", [])),
+            "attachments": [
+                {
+                    "id": a.get("id"),
+                    "filename": a.get("filename"),
+                    "mimeType": a.get("mimeType"),
+                    "size": a.get("size")
+                }
+                for a in fields.get("attachment", [])
+            ],
             "comment_count": (fields.get("comment") or {}).get("total", 0),
         }
         
