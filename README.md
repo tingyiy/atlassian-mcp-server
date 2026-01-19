@@ -20,7 +20,7 @@ This server enables LLM agents (like Claude Desktop) to:
 - `jira_update_issue`: Update issue summary and description.
 - `jira_add_comment`: Add comments to issues.
 - `jira_get_comments`: Retrieve all comments on an issue.
-- `jira_download_attachment`: Download an attachment (image/document) by its ID.
+- `jira_get_attachment_image`: Download an attachment (image/document) by its ID.
 - `jira_transition_issue`: Move issues through their workflow (e.g., To Do -> Done).
 
 ### Confluence Tools

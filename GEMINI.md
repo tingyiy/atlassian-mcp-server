@@ -60,7 +60,7 @@ The project is a standalone Python application located in `caeli/mcps/atlassian`
 - [x] **Delete Pages**: Add a tool to delete specific pages (`confluence_delete_page`).
 - [x] **Search CQL**: Expose full CQL (Confluence Query Language) search capabilities via `confluence_search`.
 - [ ] **Comment Management**: Add tools to read and post comments on pages.
-- [ ] **Attachment Handling**: Support listing and downloading attachments.
+- [ ] **Attachment Handling**: Support downloading attachments (`jira_get_attachment_image`).
 
 ### General Improvements
 - **Error Handling**: Improve error messages to be more user-friendly and handle specific Atlassian error codes more gracefully.
