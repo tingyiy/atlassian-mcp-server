@@ -136,7 +136,9 @@ class ConfluenceClient:
                 json=payload,
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            if response.status_code >= 400:
+                error_detail = response.text
+                raise Exception(f"Confluence API Error {response.status_code}: {error_detail}")
             return response.json()
 
     async def delete_page(self, page_id: str) -> None:

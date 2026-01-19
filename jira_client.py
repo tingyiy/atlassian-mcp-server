@@ -24,23 +24,27 @@ class JiraClient:
             "Content-Type": "application/json"
         }
 
-    async def list_issues(self, jql: str = "created is not empty order by created DESC", max_results: int = 50) -> List[Dict[str, Any]]:
-        logger.debug(f"list_issues: jql='{jql}'")
+    async def list_issues(self, jql: str = "created is not empty order by created DESC", next_page_token: Optional[str] = None, max_results: int = 50) -> Dict[str, Any]:
+        logger.debug(f"list_issues: jql='{jql}', next_page_token={next_page_token}, max_results={max_results}")
+        payload = {
+            "jql": jql,
+            "maxResults": max_results,
+            "fields": ["key", "summary", "status", "priority", "assignee"]
+        }
+        if next_page_token:
+            payload["nextPageToken"] = next_page_token
+            
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.base_url}/search/jql",
-                json={
-                    "jql": jql,
-                    "maxResults": max_results,
-                    "fields": ["key", "summary", "status", "priority", "assignee"]
-                },
+                json=payload,
                 headers=self.auth_header
             )
             logger.debug(f"list_issues status: {response.status_code}")
             response.raise_for_status()
             data = response.json()
-            # print("DEBUG:", data)
-            return [
+            
+            issues = [
                 {
                     "key": issue.get("key"),
                     "summary": (issue.get("fields") or {}).get("summary", "No Summary"),
@@ -50,6 +54,11 @@ class JiraClient:
                 }
                 for issue in data.get("issues", [])
             ]
+            
+            return {
+                "issues": issues,
+                "next_page_token": data.get("nextPageToken")
+            }
 
     async def get_issue(self, issue_key: str) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:

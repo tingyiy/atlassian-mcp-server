@@ -32,16 +32,22 @@ except Exception as e:
     confluence = None
 
 @mcp.tool()
-async def list_jira_issues(jql: str = "created is not empty order by created DESC", max_results: int = 50) -> str:
-    """Lists Jira issues using JQL."""
-    logger.info(f"Tool called: list_jira_issues(jql='{jql}', max_results={max_results})")
+async def list_jira_issues(jql: str = "created is not empty order by created DESC", next_page_token: str = None, max_results: int = 50) -> str:
+    """Lists Jira issues using JQL.
+    
+    Args:
+        jql: JQL query string.
+        next_page_token: Token for pagination (returned in previous response).
+        max_results: Maximum number of results to return.
+    """
+    logger.info(f"Tool called: list_jira_issues(jql='{jql}', next_page_token={next_page_token}, max_results={max_results})")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
     try:
-        issues = await jira.list_issues(jql, max_results)
-        logger.info(f"Found {len(issues)} issues")
-        return str(issues)
+        result = await jira.list_issues(jql, next_page_token, max_results)
+        logger.info(f"Found {len(result['issues'])} issues")
+        return json.dumps(result, indent=2)
     except Exception as e:
         logger.error(f"Error listing issues: {e}")
         return f"Error: {e}"
@@ -55,8 +61,26 @@ async def read_jira_issue(issue_key: str) -> str:
         return "Jira client not initialized. Check configuration."
     try:
         issue = await jira.get_issue(issue_key)
+        fields = issue.get("fields") or {}
+        
+        # Extract only essential fields to avoid truncation
+        result = {
+            "key": issue.get("key"),
+            "summary": fields.get("summary"),
+            "status": (fields.get("status") or {}).get("name"),
+            "priority": (fields.get("priority") or {}).get("name"),
+            "assignee": (fields.get("assignee") or {}).get("displayName"),
+            "reporter": (fields.get("reporter") or {}).get("displayName"),
+            "created": fields.get("created"),
+            "updated": fields.get("updated"),
+            "description": fields.get("description"),  # ADF format
+            "labels": fields.get("labels", []),
+            "attachment_count": len(fields.get("attachment", [])),
+            "comment_count": (fields.get("comment") or {}).get("total", 0),
+        }
+        
         logger.info(f"Successfully read issue {issue_key}")
-        return str(issue)
+        return json.dumps(result, indent=2, default=str)
     except Exception as e:
         logger.error(f"Error reading issue {issue_key}: {e}")
         return f"Error: {e}"
