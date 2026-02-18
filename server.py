@@ -1,10 +1,10 @@
 from mcp.server.fastmcp import FastMCP, Image
 from jira_client import JiraClient
 from confluence_client import ConfluenceClient
+from md2adf import convert as md_to_adf
 import json
 import logging
 import sys
-from typing import Any
 
 # Configure logging to stderr
 logging.basicConfig(
@@ -94,16 +94,21 @@ async def read_jira_issue(issue_key: str) -> str:
         return f"Error: {e}"
 
 @mcp.tool()
-async def jira_add_comment(issue_key: str, comment: Any) -> str:
-    """Adds a comment to a Jira issue. 
-    Accepts a string (plain text) or a dictionary (Atlassian Document Format).
+async def jira_add_comment(issue_key: str, comment: str) -> str:
+    """Adds a comment to a Jira issue.
+
+    Args:
+        issue_key: The ID or key of the issue.
+        comment: The comment content in markdown. Supports headings, bold,
+            italic, strikethrough, links, code blocks, lists, tables, etc.
     """
     logger.info(f"Tool called: jira_add_comment(issue_key='{issue_key}')")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
     try:
-        result = await jira.add_comment(issue_key, comment)
+        adf = md_to_adf(comment)
+        result = await jira.add_comment(issue_key, adf)
         comment_id = result.get('id')
         logger.info(f"Comment added to {issue_key}, ID: {comment_id}")
         return f"Comment added. ID: {comment_id}"
@@ -146,42 +151,26 @@ async def jira_get_transitions(issue_key: str) -> str:
         return f"Error: {e}"
 
 @mcp.tool()
-async def jira_update_issue(issue_key: str, summary: str = None, description: Any = None) -> str:
+async def jira_update_issue(issue_key: str, summary: str = None, description: str = None) -> str:
     """Updates the summary or description of a Jira issue.
-    For description, accepts a string (plain text) or a dictionary (Atlassian Document Format).
+    For description, accepts a markdown string. Supports headings, bold,
+    italic, strikethrough, links, code blocks, lists, tables, etc.
     """
     logger.info(f"Tool called: jira_update_issue(issue_key='{issue_key}', summary={'provided' if summary else 'None'}, description={'provided' if description else 'None'})")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
-    
+
     fields = {}
     if summary:
         fields["summary"] = summary
     if description:
-        if isinstance(description, str):
-            fields["description"] = {
-                "type": "doc",
-                "version": 1,
-                "content": [
-                    {
-                        "type": "paragraph",
-                        "content": [
-                            {
-                                "text": description,
-                                "type": "text"
-                            }
-                        ]
-                    }
-                ]
-            }
-        else:
-            fields["description"] = description
-    
+        fields["description"] = md_to_adf(description)
+
     if not fields:
         logger.warning(f"jira_update_issue called with no fields for {issue_key}")
         return "No fields provided to update."
-        
+
     try:
         await jira.update_issue(issue_key, fields)
         logger.info(f"Issue {issue_key} updated")
@@ -191,16 +180,18 @@ async def jira_update_issue(issue_key: str, summary: str = None, description: An
         return f"Error: {e}"
 
 @mcp.tool()
-async def jira_create_issue(project_key: str, summary: str, description: Any = None, issuetype: str = "Task") -> str:
+async def jira_create_issue(project_key: str, summary: str, description: str = None, issuetype: str = "Task") -> str:
     """Creates a new Jira issue.
-    For description, accepts a string (plain text) or a dictionary (Atlassian Document Format).
+    For description, accepts a markdown string. Supports headings, bold,
+    italic, strikethrough, links, code blocks, lists, tables, etc.
     """
     logger.info(f"Tool called: jira_create_issue(project_key='{project_key}', summary='{summary}')")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
     try:
-        result = await jira.create_issue(project_key, summary, description, issuetype)
+        adf_desc = md_to_adf(description) if description else None
+        result = await jira.create_issue(project_key, summary, adf_desc, issuetype)
         logger.info(f"Issue created: {result.get('key')}")
         return f"Issue created successfully. Key: {result.get('key')}, ID: {result.get('id')}"
     except Exception as e:

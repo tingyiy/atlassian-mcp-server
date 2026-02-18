@@ -2,3 +2,4 @@ mcp
 httpx
 python-dotenv
 watchfiles
+git+https://github.com/tingyiy/m2adf.git

@@ -69,30 +69,10 @@ class JiraClient:
             response.raise_for_status()
             return response.json()
 
-    async def add_comment(self, issue_key: str, comment_body: Any) -> Dict[str, Any]:
-        """Adds a comment to an issue."""
+    async def add_comment(self, issue_key: str, comment_body: Dict[str, Any]) -> Dict[str, Any]:
+        """Adds a comment to an issue. Expects an ADF document dict."""
         async with httpx.AsyncClient() as client:
-            if isinstance(comment_body, str):
-                payload = {
-                    "body": {
-                        "type": "doc",
-                        "version": 1,
-                        "content": [
-                            {
-                                "type": "paragraph",
-                                "content": [
-                                    {
-                                        "text": comment_body,
-                                        "type": "text"
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                }
-            else:
-                payload = {"body": comment_body}
-            
+            payload = {"body": comment_body}
             response = await client.post(
                 f"{self.base_url}/issue/{issue_key}/comment",
                 json=payload,
@@ -181,8 +161,8 @@ class JiraClient:
             )
             response.raise_for_status()
 
-    async def create_issue(self, project_key: str, summary: str, description: Any = None, issuetype: str = "Task") -> Dict[str, Any]:
-        """Creates a new Jira issue."""
+    async def create_issue(self, project_key: str, summary: str, description: Dict[str, Any] = None, issuetype: str = "Task") -> Dict[str, Any]:
+        """Creates a new Jira issue. Description should be an ADF document dict."""
         async with httpx.AsyncClient() as client:
             fields = {
                 "project": {"key": project_key},
@@ -190,25 +170,8 @@ class JiraClient:
                 "issuetype": {"name": issuetype}
             }
             if description:
-                if isinstance(description, str):
-                    fields["description"] = {
-                        "type": "doc",
-                        "version": 1,
-                        "content": [
-                            {
-                                "type": "paragraph",
-                                "content": [
-                                    {
-                                        "text": description,
-                                        "type": "text"
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                else:
-                    fields["description"] = description
-            
+                fields["description"] = description
+
             payload = {"fields": fields}
             response = await client.post(
                 f"{self.base_url}/issue",
