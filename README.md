@@ -4,140 +4,140 @@
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@tingyiy/atlassian-mcp-server/badge" />
 </a>
 
+An MCP server for Jira and Confluence Cloud. Write in **markdown** — the server converts to Atlassian Document Format (ADF) automatically.
 
-A Model Context Protocol (MCP) server that provides powerful tools for interacting with Atlassian Jira and Confluence Cloud. Built with Python and the `mcp` SDK.
+## Quickstart
 
-This server enables LLM agents (like Claude Desktop) to:
-- **Jira**: Search for issues using JQL, view issue details, add comments, transition issues, and create/update issues (with rich text support).
-- **Confluence**: Search space content, view pages, create new pages (including nested pages), and edit pages (with auto-versioning).
+```bash
+git clone https://github.com/tingyiy/atlassian-mcp-server.git
+cd atlassian-mcp-server
+pip install -r requirements.txt   # or: uv pip install -r requirements.txt
+```
 
-## Features
+Then add it to your MCP client (see [Configuration](#configuration) below).
 
-### Jira Tools
-- `list_jira_issues`: Search and list issues using JQL (Jira Query Language).
-- `read_jira_issue`: Retrieve full details of a specific issue.
-- `jira_create_issue`: Create new issues (Support for Projects, Issue Types, and ADF Descriptions).
-- `jira_update_issue`: Update issue summary and description.
-- `jira_add_comment`: Add comments to issues.
-- `jira_get_comments`: Retrieve all comments on an issue.
-- `jira_get_attachment_image`: Download an attachment (image/document) by its ID.
-- `jira_transition_issue`: Move issues through their workflow (e.g., To Do -> Done).
+You'll need an [Atlassian API token](https://id.atlassian.com/manage-profile/security/api-tokens) and these values:
 
-### Confluence Tools
-- `list_confluence_pages`: List pages within a specific space.
-- `view_confluence_page`: Retrieve page content and metadata.
-- `confluence_create_page`: Create new pages, optionally nested under a parent page.
-- `edit_confluence_page`: Update page content (Automatically handles version increments).
-  - *Note*: Includes guidance for handling Mermaid diagrams via the Mermaid Diagrams plugin.
-- `confluence_delete_page`: Delete a Confluence page.
-- `confluence_search`: Perform advanced searches using CQL (Confluence Query Language).
-- `confluence_get_comments`: Retrieve all comments on a page.
+| Variable | Example |
+|----------|---------|
+| `ATLASSIAN_USERNAME` | `you@company.com` |
+| `ATLASSIAN_API_KEY` | your API token |
+| `JIRA_URL` | `https://your-domain.atlassian.net/rest/api/3` |
+| `CONFLUENCE_URL` | `https://your-domain.atlassian.net/wiki` |
+| `CONFLUENCE_SPACE_KEY` | `ENG` (optional, default space) |
 
-## Prerequisites
+## Tools
 
-- **Python**: Version 3.10+ (Tested with 3.14.2)
-- **Atlassian Account**: An Atlassian account with an API Token.
+### Jira
 
-## Setup
+| Tool | Description |
+|------|-------------|
+| `list_jira_issues` | Search issues using JQL |
+| `read_jira_issue` | Get full issue details |
+| `jira_create_issue` | Create an issue (markdown description) |
+| `jira_update_issue` | Update summary or description (markdown) |
+| `jira_add_comment` | Add a comment (markdown) |
+| `jira_get_comments` | Retrieve all comments |
+| `jira_get_attachment_image` | Download an attachment by ID |
+| `jira_transition_issue` | Move issue through workflow |
+| `jira_get_transitions` | List available transitions |
 
-1.  **Clone and Install**:
-    ```bash
-    git clone https://github.com/tingyiy/atlassian-mcp-server.git
-    cd atlassian-mcp-server
-    pip install -r requirements.txt
-    ```
+### Confluence
 
-2.  **Configuration**:
-    Create a `.env` file in the project root with your credentials:
-    ```bash
-    ATLASSIAN_USERNAME=your_email@example.com
-    ATLASSIAN_API_KEY=your_api_token
-    JIRA_URL=https://your-domain.atlassian.net/rest/api/3
-    CONFLUENCE_URL=https://your-domain.atlassian.net/wiki
-    CONFLUENCE_SPACE_KEY=your_default_space_key
-    ```
-    *Note: `JIRA_URL` must point to the `/rest/api/3` endpoint.*
+| Tool | Description |
+|------|-------------|
+| `list_confluence_pages` | List pages in a space |
+| `view_confluence_page` | Get page content and metadata |
+| `confluence_create_page` | Create a page (optionally nested) |
+| `edit_confluence_page` | Update a page (auto-increments version) |
+| `confluence_delete_page` | Delete a page |
+| `confluence_search` | Search using CQL |
+| `confluence_get_comments` | Get all comments on a page |
+| `confluence_add_comment` | Add a comment (with reply support) |
+| `confluence_get_attachment_image` | Download an image attachment |
 
-3.  **Run the Server**:
-    ```bash
-    python server.py
-    ```
+### Markdown Support
 
-## Usage
+Jira tools (`jira_create_issue`, `jira_update_issue`, `jira_add_comment`) accept **markdown** for descriptions and comments. The server converts it to ADF behind the scenes using [md2adf](https://github.com/tingyiy/m2adf).
 
-This MCP server can be used with any MCP-compliant client, including IDEs (like Cursor, VS Code) and desktop agents (like Claude Desktop).
+Supported formatting: headings, bold, italic, strikethrough, inline code, links, images, code blocks (with language), bullet/ordered/nested lists, blockquotes, horizontal rules, and tables.
 
-### Generic Configuration
-Most MCP clients require the command to run the server and the environment variables.
-- **Command**: `python /abs/path/to/atlassian-mcp-server/server.py`
-- **Environment**: All variables from `.env` must be passed to the process.
+## Configuration
 
-### Claude Desktop
-Add the following to your `claude_desktop_config.json`:
+### Claude Code
+
+Add to `~/.claude.json`:
 
 ```json
 {
   "mcpServers": {
     "atlassian": {
-      "command": "/path/to/python",
-      "args": [
-        "/path/to/atlassian-mcp-server/server.py"
-      ],
+      "type": "stdio",
+      "command": "python3",
+      "args": ["/path/to/atlassian-mcp-server/server.py"],
       "env": {
-        "ATLASSIAN_USERNAME": "your_email@example.com",
+        "ATLASSIAN_USERNAME": "you@company.com",
         "ATLASSIAN_API_KEY": "your_api_token",
         "JIRA_URL": "https://your-domain.atlassian.net/rest/api/3",
         "CONFLUENCE_URL": "https://your-domain.atlassian.net/wiki",
-        "CONFLUENCE_SPACE_KEY": "DS"
+        "CONFLUENCE_SPACE_KEY": "ENG"
       }
     }
   }
 }
 ```
 
-### Cursor
-To use with Cursor (via the `.cursor/mcp.json` or settings):
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "namd": "atlassian",
-    "command": "python3",
-    "args": ["/path/to/atlassian-mcp-server/server.py"],
-    "env": {
-      "ATLASSIAN_USERNAME": "your_email@example.com",
-      "ATLASSIAN_API_KEY": "your_api_token",
-      "JIRA_URL": "https://your-domain.atlassian.net/rest/api/3",
-      "CONFLUENCE_URL": "https://your-domain.atlassian.net/wiki"
+    "atlassian": {
+      "command": "python3",
+      "args": ["/path/to/atlassian-mcp-server/server.py"],
+      "env": {
+        "ATLASSIAN_USERNAME": "you@company.com",
+        "ATLASSIAN_API_KEY": "your_api_token",
+        "JIRA_URL": "https://your-domain.atlassian.net/rest/api/3",
+        "CONFLUENCE_URL": "https://your-domain.atlassian.net/wiki",
+        "CONFLUENCE_SPACE_KEY": "ENG"
+      }
     }
   }
 }
 ```
-*Note: Ensure the python environment has the required dependencies installed.*
 
-## Confluence Tips: Mermaid Diagrams
+### Cursor / VS Code
 
-The MCP tools cannot render Mermaid diagrams programmatically because the standard plugin stores source code internally. To reference a diagram, provide the Mermaid source in a **code block** and ask the user to manually render it in the Confluence UI.
+Add to `.cursor/mcp.json` or `.vscode/mcp.json`:
 
-**Example Agent Output for a Diagram:**
-"I've added the following code block to the page. Please select it in the editor and convert it to a Mermaid diagram:"
-```html
-<ac:structured-macro ac:name="code" ac:schema-version="1">
-    <ac:parameter ac:name="language">text</ac:parameter>
-    <ac:plain-text-body><![CDATA[graph TD; A-->B;]]></ac:plain-text-body>
-</ac:structured-macro>
+```json
+{
+  "mcpServers": {
+    "atlassian": {
+      "command": "python3",
+      "args": ["/path/to/atlassian-mcp-server/server.py"],
+      "env": {
+        "ATLASSIAN_USERNAME": "you@company.com",
+        "ATLASSIAN_API_KEY": "your_api_token",
+        "JIRA_URL": "https://your-domain.atlassian.net/rest/api/3",
+        "CONFLUENCE_URL": "https://your-domain.atlassian.net/wiki"
+      }
+    }
+  }
+}
 ```
 
-## Contributing
+Make sure the `python3` in `command` points to an environment with the dependencies installed. To be explicit, use the full path (e.g. `/path/to/venv/bin/python`).
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Notes
 
-1.  Fork the repository.
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the branch (`git push origin feature/AmazingFeature`).
-5.  Open a Pull Request.
+### Mermaid Diagrams in Confluence
+
+Confluence's Mermaid plugin stores diagram source internally, so the MCP tools can't render them programmatically. Instead, provide the Mermaid source in a code block — the user can then convert it in the Confluence editor.
 
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+MIT — see [LICENSE](LICENSE).
