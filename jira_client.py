@@ -126,28 +126,36 @@ class JiraClient:
             )
             response.raise_for_status()
 
-    async def get_attachment_content(self, attachment_id: str) -> Optional[bytes]:
-        """Gets attachment content by ID."""
+    async def get_attachment_content(self, attachment_id: str) -> Optional[Dict[str, Any]]:
+        """Gets attachment content and metadata by ID.
+
+        Returns dict with 'data' (bytes), 'filename', and 'mimeType', or None on failure.
+        """
         async with httpx.AsyncClient() as client:
-            # The standard endpoint for content is /rest/api/3/attachment/content/{id}
-            # However, sometimes we need to follow the 'content' link from metadata.
-            # But usually, directly accessing the content URL works if we know the ID.
-            # The robust way: GET /rest/api/3/attachment/{id} to get metadata (including secure content URL)
-            
             meta_response = await client.get(
                 f"{self.base_url}/attachment/{attachment_id}",
                 headers=self.auth_header
             )
             meta_response.raise_for_status()
             metadata = meta_response.json()
-            
+
             content_url = metadata.get("content")
             if not content_url:
                 return None
-                
-            img_response = await client.get(content_url, headers=self.auth_header, follow_redirects=True)
-            img_response.raise_for_status()
-            return img_response.content
+
+            # Use separate headers for binary download: keep auth but
+            # accept any content type and don't send Content-Type.
+            download_headers = {
+                "Authorization": self.auth_header["Authorization"],
+                "Accept": "*/*",
+            }
+            response = await client.get(content_url, headers=download_headers, follow_redirects=True)
+            response.raise_for_status()
+            return {
+                "data": response.content,
+                "filename": metadata.get("filename", f"attachment_{attachment_id}"),
+                "mimeType": metadata.get("mimeType", "application/octet-stream"),
+            }
 
 
     async def update_issue(self, issue_key: str, fields: Dict[str, Any]) -> None:

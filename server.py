@@ -4,8 +4,10 @@ from confluence_client import ConfluenceClient
 from md2adf import convert as md_to_adf
 import json
 import logging
+import os
 import re
 import sys
+import tempfile
 
 # Configure logging to stderr
 logging.basicConfig(
@@ -404,11 +406,27 @@ async def jira_get_attachment_image(attachment_id: str) -> Image:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
     try:
-        image_data = await jira.get_attachment_content(attachment_id)
-        if not image_data:
+        result = await jira.get_attachment_content(attachment_id)
+        if not result:
             return f"Error: Attachment {attachment_id} could not be downloaded."
-            
-        return Image(data=image_data, format='png')
+
+        tmp_dir = os.path.join(tempfile.gettempdir(), "jira_attachments")
+        os.makedirs(tmp_dir, exist_ok=True)
+
+        filename = result["filename"]
+        file_path = os.path.join(tmp_dir, f"{attachment_id}_{filename}")
+        with open(file_path, "wb") as f:
+            f.write(result["data"])
+
+        mime = result["mimeType"]
+        logger.info(f"Saved attachment to {file_path} ({mime}, {len(result['data'])} bytes)")
+
+        # Return as Image if it's an image, otherwise return the file path
+        if mime.startswith("image/"):
+            fmt = mime.split("/")[-1].replace("jpeg", "jpg")
+            return Image(data=result["data"], format=fmt)
+
+        return f"Attachment saved to {file_path} ({mime}, {len(result['data'])} bytes). Use the Read tool to view its contents."
     except Exception as e:
         logger.error(f"Error getting attachment {attachment_id}: {e}")
         return f"Error: {e}"
