@@ -169,6 +169,19 @@ class JiraClient:
             )
             response.raise_for_status()
 
+    async def get_user(self, account_id: str) -> Optional[Dict[str, Any]]:
+        """Get a user by account ID. Returns None if not found."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/user",
+                params={"accountId": account_id},
+                headers=self.auth_header
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            return response.json()
+
     async def search_users(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         """Search for Jira users by name or email."""
         async with httpx.AsyncClient() as client:

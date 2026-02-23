@@ -58,10 +58,28 @@ async def _md_to_adf_with_mentions(markdown: str) -> dict | str:
     ambiguous = []  # [(name, [users...])]
 
     # Direct ID references: @[accountId]
+    invalid_ids = []
     for match in _MENTION_ID_RE.finditer(markdown):
         account_id = match.group(1)
-        key = f"id:{account_id}"
-        resolved[key] = {"accountId": account_id, "displayName": "user"}
+        try:
+            user = await jira.get_user(account_id)
+        except Exception:
+            user = None
+        if user:
+            key = f"id:{account_id}"
+            resolved[key] = {
+                "accountId": account_id,
+                "displayName": user.get("displayName", "user"),
+            }
+        else:
+            invalid_ids.append(account_id)
+
+    if invalid_ids:
+        lines = ["Could not find user(s) for the following account ID(s):\n"]
+        for aid in invalid_ids:
+            lines.append(f"  - @[{aid}]")
+        lines.append("\nPlease verify the ID and try again. Use jira_search_users to look up users.")
+        return "\n".join(lines)
 
     # Name-based mentions: @username
     seen = set()
