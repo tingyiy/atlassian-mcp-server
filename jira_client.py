@@ -161,6 +161,17 @@ class JiraClient:
             )
             response.raise_for_status()
 
+    async def search_users(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        """Search for Jira users by name or email."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/user/search",
+                params={"query": query, "maxResults": max_results},
+                headers=self.auth_header
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def create_issue(self, project_key: str, summary: str, description: Dict[str, Any] = None, issuetype: str = "Task") -> Dict[str, Any]:
         """Creates a new Jira issue. Description should be an ADF document dict."""
         async with httpx.AsyncClient() as client:

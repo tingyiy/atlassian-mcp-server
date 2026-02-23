@@ -4,6 +4,7 @@ from confluence_client import ConfluenceClient
 from md2adf import convert as md_to_adf
 import json
 import logging
+import re
 import sys
 
 # Configure logging to stderr
@@ -30,6 +31,178 @@ except Exception as e:
     # We'll allow server to start but tools will fail if clients aren't ready
     jira = None
     confluence = None
+
+_MENTION_NAME_RE = re.compile(r'(?<!\w)@([a-zA-Z][a-zA-Z0-9._-]*)')
+_MENTION_ID_RE = re.compile(r'@\[([^\]]+)\]')
+_MENTION_PLACEHOLDER = '\x00MENTION:{key}\x00'
+_PLACEHOLDER_RE = re.compile(r'\x00MENTION:([^\x00]+)\x00')
+
+
+async def _md_to_adf_with_mentions(markdown: str) -> dict | str:
+    """Convert markdown to ADF, resolving @mentions to Jira users.
+
+    Supports two formats:
+    - @username — searches users; auto-resolves if exactly 1 match
+    - @[accountId] — direct resolve by account ID (for retry after disambiguation)
+
+    Returns ADF dict on success, or a disambiguation string if any
+    @username matched multiple users (comment is NOT posted).
+    """
+    if not jira:
+        return md_to_adf(markdown)
+
+    # Phase 1: resolve all mentions
+    resolved = {}   # key -> {accountId, displayName}
+    ambiguous = []  # [(name, [users...])]
+
+    # Direct ID references: @[accountId]
+    for match in _MENTION_ID_RE.finditer(markdown):
+        account_id = match.group(1)
+        key = f"id:{account_id}"
+        resolved[key] = {"accountId": account_id, "displayName": "user"}
+
+    # Name-based mentions: @username
+    seen = set()
+    for match in _MENTION_NAME_RE.finditer(markdown):
+        name = match.group(1)
+        if name in seen:
+            continue
+        seen.add(name)
+        try:
+            users = await jira.search_users(name, max_results=5)
+        except Exception:
+            users = []
+
+        if len(users) == 1:
+            key = f"name:{name}"
+            resolved[key] = {
+                "accountId": users[0].get("accountId"),
+                "displayName": users[0].get("displayName", name),
+            }
+        elif len(users) >= 2:
+            ambiguous.append((name, users))
+
+    # Phase 2: if any ambiguous, return disambiguation prompt
+    if ambiguous:
+        lines = ["Found multiple matches for the following mentions:\n"]
+        for name, users in ambiguous:
+            lines.append(f"@{name}:")
+            for u in users:
+                aid = u.get("accountId", "")
+                dn = u.get("displayName", "")
+                lines.append(f"  - {dn} → use @[{aid}]")
+        lines.append(
+            "\nPlease re-call with @[accountId] to specify the exact user."
+        )
+        return "\n".join(lines)
+
+    # Phase 3: replace mentions in markdown with placeholders before ADF conversion
+    # (so mistune doesn't mangle the @[id] brackets)
+    processed = markdown
+    for match in _MENTION_ID_RE.finditer(markdown):
+        account_id = match.group(1)
+        key = f"id:{account_id}"
+        processed = processed.replace(match.group(0), _MENTION_PLACEHOLDER.format(key=key), 1)
+    for name in seen:
+        key = f"name:{name}"
+        if key in resolved:
+            processed = processed.replace(f"@{name}", _MENTION_PLACEHOLDER.format(key=key), 1)
+
+    # Phase 4: convert to ADF
+    adf = md_to_adf(processed)
+
+    # Phase 5: walk ADF tree and swap placeholders for mention nodes
+    if resolved:
+        _inject_mentions(adf, resolved)
+    return adf
+
+
+def _inject_mentions(adf: dict, resolved: dict):
+    """Walk ADF tree and replace placeholder text with mention nodes."""
+    if "content" in adf:
+        adf["content"] = _process_nodes(adf["content"], resolved)
+
+
+def _process_nodes(content: list, resolved: dict) -> list:
+    result = []
+    for node in content:
+        if node.get("type") == "text":
+            result.extend(_split_placeholders(node, resolved))
+        else:
+            if "content" in node:
+                node["content"] = _process_nodes(node["content"], resolved)
+            result.append(node)
+    return result
+
+
+def _split_placeholders(node: dict, resolved: dict) -> list:
+    text = node.get("text", "")
+    marks = node.get("marks")
+    parts = []
+    last_end = 0
+
+    for match in _PLACEHOLDER_RE.finditer(text):
+        key = match.group(1)
+        info = resolved.get(key)
+        if not info:
+            continue
+
+        if match.start() > last_end:
+            before = {"type": "text", "text": text[last_end:match.start()]}
+            if marks:
+                before["marks"] = marks
+            parts.append(before)
+
+        parts.append({
+            "type": "mention",
+            "attrs": {
+                "id": info["accountId"],
+                "text": f"@{info['displayName']}",
+                "accessLevel": "",
+            },
+        })
+        last_end = match.end()
+
+    if not parts:
+        return [node]
+
+    if last_end < len(text):
+        after = {"type": "text", "text": text[last_end:]}
+        if marks:
+            after["marks"] = marks
+        parts.append(after)
+    return parts
+
+
+@mcp.tool()
+async def jira_search_users(query: str, max_results: int = 10) -> str:
+    """Searches for Jira users by name or email.
+
+    Args:
+        query: Name, email, or username fragment to search for.
+        max_results: Maximum number of results to return.
+    """
+    logger.info(f"Tool called: jira_search_users(query='{query}', max_results={max_results})")
+    if not jira:
+        logger.error("Jira client not initialized")
+        return "Jira client not initialized. Check configuration."
+    try:
+        users = await jira.search_users(query, max_results)
+        simple = [
+            {
+                "accountId": u.get("accountId"),
+                "displayName": u.get("displayName"),
+                "emailAddress": u.get("emailAddress"),
+                "active": u.get("active"),
+            }
+            for u in users
+        ]
+        logger.info(f"Found {len(simple)} users for query '{query}'")
+        return json.dumps(simple, indent=2)
+    except Exception as e:
+        logger.error(f"Error searching users: {e}")
+        return f"Error: {e}"
+
 
 @mcp.tool()
 async def list_jira_issues(jql: str = "created is not empty order by created DESC", next_page_token: str = None, max_results: int = 50) -> str:
@@ -101,13 +274,17 @@ async def jira_add_comment(issue_key: str, comment: str) -> str:
         issue_key: The ID or key of the issue.
         comment: The comment content in markdown. Supports headings, bold,
             italic, strikethrough, links, code blocks, lists, tables, etc.
+            Use @username to mention users (auto-resolves if unique).
+            If ambiguous, re-call with @[accountId] to specify exact user.
     """
     logger.info(f"Tool called: jira_add_comment(issue_key='{issue_key}')")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
     try:
-        adf = md_to_adf(comment)
+        adf = await _md_to_adf_with_mentions(comment)
+        if isinstance(adf, str):
+            return adf  # disambiguation needed
         result = await jira.add_comment(issue_key, adf)
         comment_id = result.get('id')
         logger.info(f"Comment added to {issue_key}, ID: {comment_id}")
@@ -165,7 +342,10 @@ async def jira_update_issue(issue_key: str, summary: str = None, description: st
     if summary:
         fields["summary"] = summary
     if description:
-        fields["description"] = md_to_adf(description)
+        adf = await _md_to_adf_with_mentions(description)
+        if isinstance(adf, str):
+            return adf  # disambiguation needed
+        fields["description"] = adf
 
     if not fields:
         logger.warning(f"jira_update_issue called with no fields for {issue_key}")
@@ -190,7 +370,11 @@ async def jira_create_issue(project_key: str, summary: str, description: str = N
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
     try:
-        adf_desc = md_to_adf(description) if description else None
+        adf_desc = None
+        if description:
+            adf_desc = await _md_to_adf_with_mentions(description)
+            if isinstance(adf_desc, str):
+                return adf_desc  # disambiguation needed
         result = await jira.create_issue(project_key, summary, adf_desc, issuetype)
         logger.info(f"Issue created: {result.get('key')}")
         return f"Issue created successfully. Key: {result.get('key')}, ID: {result.get('id')}"
