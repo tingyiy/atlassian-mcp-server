@@ -294,8 +294,12 @@ async def jira_add_comment(issue_key: str, comment: str) -> str:
         issue_key: The ID or key of the issue.
         comment: The comment content in markdown. Supports headings, bold,
             italic, strikethrough, links, code blocks, lists, tables, etc.
-            Use @username to mention users (auto-resolves if unique).
-            If ambiguous, re-call with @[accountId] to specify exact user.
+
+    Mentioning users:
+        To tag a user, first call jira_search_users to find their accountId,
+        then use @[accountId] in the text (e.g. @[712020:abc123]).
+        You can also use @username which auto-resolves if there is exactly
+        one match, but will fail if ambiguous — prefer @[accountId].
     """
     logger.info(f"Tool called: jira_add_comment(issue_key='{issue_key}')")
     if not jira:
@@ -352,6 +356,12 @@ async def jira_update_issue(issue_key: str, summary: str = None, description: st
     """Updates the summary or description of a Jira issue.
     For description, accepts a markdown string. Supports headings, bold,
     italic, strikethrough, links, code blocks, lists, tables, etc.
+
+    Mentioning users:
+        To tag a user, first call jira_search_users to find their accountId,
+        then use @[accountId] in the text (e.g. @[712020:abc123]).
+        You can also use @username which auto-resolves if there is exactly
+        one match, but will fail if ambiguous — prefer @[accountId].
     """
     logger.info(f"Tool called: jira_update_issue(issue_key='{issue_key}', summary={'provided' if summary else 'None'}, description={'provided' if description else 'None'})")
     if not jira:
@@ -384,6 +394,12 @@ async def jira_create_issue(project_key: str, summary: str, description: str = N
     """Creates a new Jira issue.
     For description, accepts a markdown string. Supports headings, bold,
     italic, strikethrough, links, code blocks, lists, tables, etc.
+
+    Mentioning users:
+        To tag a user, first call jira_search_users to find their accountId,
+        then use @[accountId] in the text (e.g. @[712020:abc123]).
+        You can also use @username which auto-resolves if there is exactly
+        one match, but will fail if ambiguous — prefer @[accountId].
     """
     logger.info(f"Tool called: jira_create_issue(project_key='{project_key}', summary='{summary}')")
     if not jira:
