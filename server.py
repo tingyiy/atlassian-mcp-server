@@ -36,8 +36,8 @@ except Exception as e:
 
 _MENTION_NAME_RE = re.compile(r'(?<!\w)@([a-zA-Z][a-zA-Z0-9._-]*)')
 _MENTION_ID_RE = re.compile(r'@\[([^\]]+)\]')
-_MENTION_PLACEHOLDER = '\x00MENTION:{key}\x00'
-_PLACEHOLDER_RE = re.compile(r'\x00MENTION:([^\x00]+)\x00')
+_MENTION_PLACEHOLDER = '{{{MENTION:{key}}}}'
+_PLACEHOLDER_RE = re.compile(r'\{\{\{MENTION:([^}]+)\}\}\}')
 
 
 async def _md_to_adf_with_mentions(markdown: str) -> dict | str:
