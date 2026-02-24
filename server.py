@@ -36,7 +36,7 @@ except Exception as e:
 
 _MENTION_NAME_RE = re.compile(r'(?<!\w)@([a-zA-Z][a-zA-Z0-9._-]*)')
 _MENTION_ID_RE = re.compile(r'@\[([^\]]+)\]')
-_MENTION_PLACEHOLDER = '{{{MENTION:{key}}}}'
+_MENTION_PLACEHOLDER = '{{{MENTION:%s}}}'
 _PLACEHOLDER_RE = re.compile(r'\{\{\{MENTION:([^}]+)\}\}\}')
 
 
@@ -122,11 +122,11 @@ async def _md_to_adf_with_mentions(markdown: str) -> dict | str:
     for match in _MENTION_ID_RE.finditer(markdown):
         account_id = match.group(1)
         key = f"id:{account_id}"
-        processed = processed.replace(match.group(0), _MENTION_PLACEHOLDER.format(key=key), 1)
+        processed = processed.replace(match.group(0), _MENTION_PLACEHOLDER % key, 1)
     for name in seen:
         key = f"name:{name}"
         if key in resolved:
-            processed = processed.replace(f"@{name}", _MENTION_PLACEHOLDER.format(key=key), 1)
+            processed = processed.replace(f"@{name}", _MENTION_PLACEHOLDER % key, 1)
 
     # Phase 4: convert to ADF
     adf = md_to_adf(processed)
