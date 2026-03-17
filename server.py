@@ -396,6 +396,26 @@ async def jira_edit_comment(issue_key: str, comment_id: str, comment: str) -> st
         return f"Error: {e}"
 
 @mcp.tool()
+async def jira_delete_comment(issue_key: str, comment_id: str) -> str:
+    """Deletes a comment from a Jira issue.
+
+    Args:
+        issue_key: The ID or key of the issue.
+        comment_id: The ID of the comment to delete (from jira_get_comments).
+    """
+    logger.info(f"Tool called: jira_delete_comment(issue_key='{issue_key}', comment_id='{comment_id}')")
+    if not jira:
+        logger.error("Jira client not initialized")
+        return "Jira client not initialized. Check configuration."
+    try:
+        await jira.delete_comment(issue_key, comment_id)
+        logger.info(f"Comment {comment_id} deleted from {issue_key}")
+        return f"Comment {comment_id} deleted."
+    except Exception as e:
+        logger.error(f"Error deleting comment {comment_id} on {issue_key}: {e}")
+        return f"Error: {e}"
+
+@mcp.tool()
 async def jira_transition_issue(issue_key: str, transition_id: str) -> str:
     """Transitions a Jira issue to a new status using a transition ID.
     Use jira_get_transitions to find available transition IDs.

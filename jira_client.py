@@ -106,6 +106,15 @@ class JiraClient:
             response.raise_for_status()
             return response.json()
 
+    async def delete_comment(self, issue_key: str, comment_id: str) -> None:
+        """Deletes a comment from an issue."""
+        async with httpx.AsyncClient() as client:
+            response = await client.delete(
+                f"{self.base_url}/issue/{issue_key}/comment/{comment_id}",
+                headers=self.auth_header
+            )
+            response.raise_for_status()
+
     async def get_comments(self, issue_key: str) -> List[Dict[str, Any]]:
         """Gets all comments for an issue."""
         async with httpx.AsyncClient() as client:
