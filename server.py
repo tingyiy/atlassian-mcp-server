@@ -225,38 +225,54 @@ async def jira_search_users(query: str, max_results: int = 10) -> str:
 
 
 @mcp.tool()
-async def list_jira_issues(jql: str = "created is not empty order by created DESC", next_page_token: str = None, max_results: int = 50) -> str:
+async def list_jira_issues(jql: str = "created is not empty order by created DESC", next_page_token: str = None, max_results: int = 50, additional_fields: list[str] = None) -> str:
     """Lists Jira issues using JQL.
-    
+
+    By default returns key, summary, status, priority, assignee.
+    Use additional_fields to include extra Jira fields in the response.
+
     Args:
         jql: JQL query string.
         next_page_token: Token for pagination (returned in previous response).
         max_results: Maximum number of results to return.
+        additional_fields: Extra Jira field names to include, e.g.
+            ["issuetype", "labels", "created", "updated", "duedate",
+             "components", "fixVersions", "reporter", "resolution",
+             "parent", "subtasks"].
     """
-    logger.info(f"Tool called: list_jira_issues(jql='{jql}', next_page_token={next_page_token}, max_results={max_results})")
+    logger.info(f"Tool called: list_jira_issues(jql='{jql}', next_page_token={next_page_token}, max_results={max_results}, additional_fields={additional_fields})")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
     try:
-        result = await jira.list_issues(jql, next_page_token, max_results)
+        result = await jira.list_issues(jql, next_page_token, max_results, additional_fields)
         logger.info(f"Found {len(result['issues'])} issues")
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, default=str)
     except Exception as e:
         logger.error(f"Error listing issues: {e}")
         return f"Error: {e}"
 
 @mcp.tool()
-async def read_jira_issue(issue_key: str) -> str:
-    """Gets details of a specific Jira issue."""
-    logger.info(f"Tool called: read_jira_issue(issue_key='{issue_key}')")
+async def read_jira_issue(issue_key: str, additional_fields: list[str] = None) -> str:
+    """Gets details of a specific Jira issue.
+
+    By default returns a compact set of fields. Use additional_fields to
+    request more without bloating every response.
+
+    Args:
+        issue_key: The issue key (e.g. "PROJ-123").
+        additional_fields: Extra Jira field names to include, e.g.
+            ["components", "fixVersions", "duedate", "resolution",
+             "parent", "subtasks", "issuetype", "customfield_XXXXX"].
+    """
+    logger.info(f"Tool called: read_jira_issue(issue_key='{issue_key}', additional_fields={additional_fields})")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
     try:
         issue = await jira.get_issue(issue_key)
         fields = issue.get("fields") or {}
-        
-        # Extract only essential fields to avoid truncation
+
         result = {
             "key": issue.get("key"),
             "summary": fields.get("summary"),
@@ -279,11 +295,42 @@ async def read_jira_issue(issue_key: str) -> str:
             ],
             "comment_count": (fields.get("comment") or {}).get("total", 0),
         }
-        
+
+        for f in (additional_fields or []):
+            result[f] = fields.get(f)
+
         logger.info(f"Successfully read issue {issue_key}")
         return json.dumps(result, indent=2, default=str)
     except Exception as e:
         logger.error(f"Error reading issue {issue_key}: {e}")
+        return f"Error: {e}"
+
+@mcp.tool()
+async def jira_list_fields() -> str:
+    """Lists all available Jira fields (standard and custom).
+
+    Use this to discover field IDs you can pass as additional_fields to
+    read_jira_issue, list_jira_issues, or jira_update_issue.
+    """
+    logger.info("Tool called: jira_list_fields()")
+    if not jira:
+        logger.error("Jira client not initialized")
+        return "Jira client not initialized. Check configuration."
+    try:
+        fields = await jira.get_fields()
+        result = [
+            {
+                "id": f.get("id"),
+                "name": f.get("name"),
+                "custom": f.get("custom", False),
+            }
+            for f in fields
+        ]
+        result.sort(key=lambda x: (x["custom"], x["name"] or ""))
+        logger.info(f"Found {len(result)} fields")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error listing fields: {e}")
         return f"Error: {e}"
 
 @mcp.tool()
@@ -315,6 +362,57 @@ async def jira_add_comment(issue_key: str, comment: str) -> str:
         return f"Comment added. ID: {comment_id}"
     except Exception as e:
         logger.error(f"Error adding comment to {issue_key}: {e}")
+        return f"Error: {e}"
+
+@mcp.tool()
+async def jira_edit_comment(issue_key: str, comment_id: str, comment: str) -> str:
+    """Edits an existing comment on a Jira issue.
+
+    Args:
+        issue_key: The ID or key of the issue.
+        comment_id: The ID of the comment to edit (from jira_get_comments).
+        comment: The new comment content in markdown. Supports headings, bold,
+            italic, strikethrough, links, code blocks, lists, tables, etc.
+
+    Mentioning users:
+        To tag a user, first call jira_search_users to find their accountId,
+        then use @[accountId] in the text (e.g. @[712020:abc123]).
+        You can also use @username which auto-resolves if there is exactly
+        one match, but will fail if ambiguous -- prefer @[accountId].
+    """
+    logger.info(f"Tool called: jira_edit_comment(issue_key='{issue_key}', comment_id='{comment_id}')")
+    if not jira:
+        logger.error("Jira client not initialized")
+        return "Jira client not initialized. Check configuration."
+    try:
+        adf = await _md_to_adf_with_mentions(comment)
+        if isinstance(adf, str):
+            return adf  # disambiguation needed
+        result = await jira.update_comment(issue_key, comment_id, adf)
+        logger.info(f"Comment {comment_id} updated on {issue_key}")
+        return f"Comment {comment_id} updated."
+    except Exception as e:
+        logger.error(f"Error editing comment {comment_id} on {issue_key}: {e}")
+        return f"Error: {e}"
+
+@mcp.tool()
+async def jira_delete_comment(issue_key: str, comment_id: str) -> str:
+    """Deletes a comment from a Jira issue.
+
+    Args:
+        issue_key: The ID or key of the issue.
+        comment_id: The ID of the comment to delete (from jira_get_comments).
+    """
+    logger.info(f"Tool called: jira_delete_comment(issue_key='{issue_key}', comment_id='{comment_id}')")
+    if not jira:
+        logger.error("Jira client not initialized")
+        return "Jira client not initialized. Check configuration."
+    try:
+        await jira.delete_comment(issue_key, comment_id)
+        logger.info(f"Comment {comment_id} deleted from {issue_key}")
+        return f"Comment {comment_id} deleted."
+    except Exception as e:
+        logger.error(f"Error deleting comment {comment_id} on {issue_key}: {e}")
         return f"Error: {e}"
 
 @mcp.tool()
@@ -352,18 +450,24 @@ async def jira_get_transitions(issue_key: str) -> str:
         return f"Error: {e}"
 
 @mcp.tool()
-async def jira_update_issue(issue_key: str, summary: str = None, description: str = None) -> str:
-    """Updates the summary or description of a Jira issue.
-    For description, accepts a markdown string. Supports headings, bold,
-    italic, strikethrough, links, code blocks, lists, tables, etc.
+async def jira_update_issue(issue_key: str, summary: str = None, description: str = None, additional_fields: dict = None) -> str:
+    """Updates fields on a Jira issue.
 
-    Mentioning users:
-        To tag a user, first call jira_search_users to find their accountId,
+    Args:
+        issue_key: The issue key (e.g. "PROJ-123").
+        summary: New summary text.
+        description: New description in markdown. Supports headings, bold,
+            italic, strikethrough, links, code blocks, lists, tables, etc.
+        additional_fields: Dict of field_id -> value for any other fields.
+            Use jira_list_fields to discover field IDs.
+            Example: {"customfield_10050": "Deploy after RET-833",
+                      "duedate": "2026-04-01"}
+
+    Mentioning users (in description only):
+        First call jira_search_users to find the accountId,
         then use @[accountId] in the text (e.g. @[712020:abc123]).
-        You can also use @username which auto-resolves if there is exactly
-        one match, but will fail if ambiguous — prefer @[accountId].
     """
-    logger.info(f"Tool called: jira_update_issue(issue_key='{issue_key}', summary={'provided' if summary else 'None'}, description={'provided' if description else 'None'})")
+    logger.info(f"Tool called: jira_update_issue(issue_key='{issue_key}', summary={'provided' if summary else 'None'}, description={'provided' if description else 'None'}, additional_fields={additional_fields})")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
@@ -376,6 +480,8 @@ async def jira_update_issue(issue_key: str, summary: str = None, description: st
         if isinstance(adf, str):
             return adf  # disambiguation needed
         fields["description"] = adf
+    if additional_fields:
+        fields.update(additional_fields)
 
     if not fields:
         logger.warning(f"jira_update_issue called with no fields for {issue_key}")

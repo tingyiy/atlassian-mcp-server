@@ -24,12 +24,12 @@ class JiraClient:
             "Content-Type": "application/json"
         }
 
-    async def list_issues(self, jql: str = "created is not empty order by created DESC", next_page_token: Optional[str] = None, max_results: int = 50) -> Dict[str, Any]:
+    async def list_issues(self, jql: str = "created is not empty order by created DESC", next_page_token: Optional[str] = None, max_results: int = 50, extra_fields: Optional[List[str]] = None) -> Dict[str, Any]:
         logger.debug(f"list_issues: jql='{jql}', next_page_token={next_page_token}, max_results={max_results}")
         payload = {
             "jql": jql,
             "maxResults": max_results,
-            "fields": ["key", "summary", "status", "priority", "assignee"]
+            "fields": ["key", "summary", "status", "priority", "assignee"] + (extra_fields or [])
         }
         if next_page_token:
             payload["nextPageToken"] = next_page_token
@@ -44,16 +44,19 @@ class JiraClient:
             response.raise_for_status()
             data = response.json()
             
-            issues = [
-                {
+            issues = []
+            for issue in data.get("issues", []):
+                fields = issue.get("fields") or {}
+                item = {
                     "key": issue.get("key"),
-                    "summary": (issue.get("fields") or {}).get("summary", "No Summary"),
-                    "status": ((issue.get("fields") or {}).get("status") or {}).get("name", "Unknown"),
-                    "priority": ((issue.get("fields") or {}).get("priority") or {}).get("name", "None"),
-                    "assignee": ((issue.get("fields") or {}).get("assignee") or {}).get("displayName", "Unassigned")
+                    "summary": fields.get("summary", "No Summary"),
+                    "status": (fields.get("status") or {}).get("name", "Unknown"),
+                    "priority": (fields.get("priority") or {}).get("name", "None"),
+                    "assignee": (fields.get("assignee") or {}).get("displayName", "Unassigned"),
                 }
-                for issue in data.get("issues", [])
-            ]
+                for f in (extra_fields or []):
+                    item[f] = fields.get(f)
+                issues.append(item)
             
             return {
                 "issues": issues,
@@ -64,6 +67,16 @@ class JiraClient:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{self.base_url}/issue/{issue_key}",
+                headers=self.auth_header
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def get_fields(self) -> List[Dict[str, Any]]:
+        """Gets all available Jira fields (standard + custom)."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/field",
                 headers=self.auth_header
             )
             response.raise_for_status()
@@ -80,6 +93,27 @@ class JiraClient:
             )
             response.raise_for_status()
             return response.json()
+
+    async def update_comment(self, issue_key: str, comment_id: str, comment_body: Dict[str, Any]) -> Dict[str, Any]:
+        """Updates an existing comment on an issue. Expects an ADF document dict."""
+        async with httpx.AsyncClient() as client:
+            payload = {"body": comment_body}
+            response = await client.put(
+                f"{self.base_url}/issue/{issue_key}/comment/{comment_id}",
+                json=payload,
+                headers=self.auth_header
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def delete_comment(self, issue_key: str, comment_id: str) -> None:
+        """Deletes a comment from an issue."""
+        async with httpx.AsyncClient() as client:
+            response = await client.delete(
+                f"{self.base_url}/issue/{issue_key}/comment/{comment_id}",
+                headers=self.auth_header
+            )
+            response.raise_for_status()
 
     async def get_comments(self, issue_key: str) -> List[Dict[str, Any]]:
         """Gets all comments for an issue."""
