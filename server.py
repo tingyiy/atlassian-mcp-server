@@ -450,7 +450,7 @@ async def jira_get_transitions(issue_key: str) -> str:
         return f"Error: {e}"
 
 @mcp.tool()
-async def jira_update_issue(issue_key: str, summary: str = None, description: str = None, additional_fields: dict = None) -> str:
+async def jira_update_issue(issue_key: str, summary: str = None, description: str = None, additional_fields: dict = None, rich_text_fields: dict = None) -> str:
     """Updates fields on a Jira issue.
 
     Args:
@@ -458,16 +458,21 @@ async def jira_update_issue(issue_key: str, summary: str = None, description: st
         summary: New summary text.
         description: New description in markdown. Supports headings, bold,
             italic, strikethrough, links, code blocks, lists, tables, etc.
-        additional_fields: Dict of field_id -> value for any other fields.
+        additional_fields: Dict of field_id -> value for simple fields
+            (plain text, dates, numbers, selects).
             Use jira_list_fields to discover field IDs.
-            Example: {"customfield_10050": "Deploy after RET-833",
-                      "duedate": "2026-04-01"}
+            Example: {"duedate": "2026-04-01", "labels": ["bug"]}
+        rich_text_fields: Dict of field_id -> markdown string for rich text
+            fields that need ADF conversion (e.g. Developer Notes,
+            Deployment Info). These get converted to Atlassian Document
+            Format automatically.
+            Example: {"customfield_10402": "## Plan\n- Step 1\n- Step 2"}
 
-    Mentioning users (in description only):
+    Mentioning users (in description and rich_text_fields):
         First call jira_search_users to find the accountId,
         then use @[accountId] in the text (e.g. @[712020:abc123]).
     """
-    logger.info(f"Tool called: jira_update_issue(issue_key='{issue_key}', summary={'provided' if summary else 'None'}, description={'provided' if description else 'None'}, additional_fields={additional_fields})")
+    logger.info(f"Tool called: jira_update_issue(issue_key='{issue_key}', summary={'provided' if summary else 'None'}, description={'provided' if description else 'None'}, additional_fields={additional_fields}, rich_text_fields={rich_text_fields})")
     if not jira:
         logger.error("Jira client not initialized")
         return "Jira client not initialized. Check configuration."
@@ -482,6 +487,12 @@ async def jira_update_issue(issue_key: str, summary: str = None, description: st
         fields["description"] = adf
     if additional_fields:
         fields.update(additional_fields)
+    if rich_text_fields:
+        for field_id, markdown in rich_text_fields.items():
+            adf = await _md_to_adf_with_mentions(markdown)
+            if isinstance(adf, str):
+                return adf  # disambiguation needed
+            fields[field_id] = adf
 
     if not fields:
         logger.warning(f"jira_update_issue called with no fields for {issue_key}")
