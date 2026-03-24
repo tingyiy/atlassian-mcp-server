@@ -160,6 +160,30 @@ class JiraClient:
             )
             response.raise_for_status()
 
+    async def add_attachment(self, issue_key: str, file_path: str) -> Dict[str, Any]:
+        """Uploads a file as an attachment to an issue.
+
+        Returns the attachment metadata from the API.
+        """
+        import mimetypes
+        filename = os.path.basename(file_path)
+        content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+
+        headers = {
+            "Authorization": self.auth_header["Authorization"],
+            "X-Atlassian-Token": "no-check",
+        }
+
+        async with httpx.AsyncClient() as client:
+            with open(file_path, "rb") as f:
+                response = await client.post(
+                    f"{self.base_url}/issue/{issue_key}/attachments",
+                    headers=headers,
+                    files={"file": (filename, f, content_type)},
+                )
+            response.raise_for_status()
+            return response.json()
+
     async def get_attachment_content(self, attachment_id: str) -> Optional[Dict[str, Any]]:
         """Gets attachment content and metadata by ID.
 
