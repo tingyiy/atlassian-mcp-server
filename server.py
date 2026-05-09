@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import tempfile
+from typing import Union
 
 # Configure logging to stderr
 logging.basicConfig(
@@ -607,33 +608,51 @@ async def view_confluence_page(page_id: str) -> str:
         logger.error(f"Error viewing page {page_id}: {e}")
         return f"Error: {e}"
 
+_CONFLUENCE_FORMATS = ("markdown", "storage")
+
+
+def _confluence_body(content: str, content_format: str) -> Union[str, dict]:
+    """Build the page body for Confluence based on the declared format.
+
+    - "markdown" → convert to ADF (sent as atlas_doc_format)
+    - "storage"  → pass XHTML through unchanged (sent as storage)
+    Raises ValueError on an unknown format.
+    """
+    if content_format == "markdown":
+        return md_to_adf(content)
+    if content_format == "storage":
+        return content
+    raise ValueError(
+        f"Unknown content_format {content_format!r}. Expected one of: {', '.join(_CONFLUENCE_FORMATS)}"
+    )
+
+
 @mcp.tool()
-async def edit_confluence_page(page_id: str, title: str, content: str, version: int = None) -> str:
+async def edit_confluence_page(page_id: str, title: str, content: str, version: int = None, content_format: str = "markdown") -> str:
     """Updates a Confluence page.
     If version is not provided, it will be automatically incremented.
-    
+
+    content_format:
+    - "markdown" (default) — content is converted to ADF before upload.
+    - "storage" — content is sent as raw XHTML storage format. Use this to
+      embed Confluence macros like `<ac:structured-macro>`.
+
     MERMAID DIAGRAMS:
-    Confluence Cloud uses the Mermaid Diagrams plugin. You CANNOT create rendered diagrams programmatically.
-    The mermaid-cloud macro only references diagram content in the plugin's internal storage (not accessible via API).
-    
-    To include a Mermaid diagram, provide it as a code block for the user to manually convert:
-    <ac:structured-macro ac:name="code" ac:schema-version="1">
-    <ac:parameter ac:name="language">text</ac:parameter>
-    <ac:plain-text-body><![CDATA[sequenceDiagram
-        participant A
-        participant B
-        A->>B: Request
-        B-->>A: Response]]></ac:plain-text-body>
-    </ac:structured-macro>
-    
-    The user can then convert this code block to a rendered diagram in the Confluence editor.
+    Confluence Cloud's Mermaid Diagrams plugin cannot be rendered via API.
+    Provide diagrams as a fenced ```mermaid code block; the user can convert
+    it to a rendered diagram in the Confluence editor.
     """
-    logger.info(f"Tool called: edit_confluence_page(page_id='{page_id}', version={version})")
+    logger.info(f"Tool called: edit_confluence_page(page_id='{page_id}', version={version}, content_format='{content_format}')")
     if not confluence:
         logger.error("Confluence client not initialized")
         return "Confluence client not initialized. Check configuration."
     try:
-        result = await confluence.update_page(page_id, title, content, version)
+        body = _confluence_body(content, content_format)
+    except ValueError as e:
+        logger.error(f"Invalid content_format: {e}")
+        return f"Error: {e}"
+    try:
+        result = await confluence.update_page(page_id, title, body, version)
         logger.info(f"Page {page_id} updated successfully")
         return str(result)
     except Exception as e:
@@ -641,14 +660,24 @@ async def edit_confluence_page(page_id: str, title: str, content: str, version: 
         return f"Error: {e}"
 
 @mcp.tool()
-async def confluence_create_page(title: str, content: str, parent_id: str = None, space_key: str = None) -> str:
-    """Creates a new Confluence page, optionally under a parent page."""
-    logger.info(f"Tool called: confluence_create_page(title='{title}', parent_id={parent_id}, space_key={space_key})")
+async def confluence_create_page(title: str, content: str, parent_id: str = None, space_key: str = None, content_format: str = "markdown") -> str:
+    """Creates a new Confluence page, optionally under a parent page.
+
+    content_format:
+    - "markdown" (default) — content is converted to ADF before upload.
+    - "storage" — content is sent as raw XHTML storage format (for macros etc.).
+    """
+    logger.info(f"Tool called: confluence_create_page(title='{title}', parent_id={parent_id}, space_key={space_key}, content_format='{content_format}')")
     if not confluence:
         logger.error("Confluence client not initialized")
         return "Confluence client not initialized. Check configuration."
     try:
-        result = await confluence.create_page(title, content, parent_id, space_key)
+        body = _confluence_body(content, content_format)
+    except ValueError as e:
+        logger.error(f"Invalid content_format: {e}")
+        return f"Error: {e}"
+    try:
+        result = await confluence.create_page(title, body, parent_id, space_key)
         page_id = result.get('id')
         logger.info(f"Page created successfully: {page_id}")
         return f"Page created successfully. ID: {page_id}, Link: {result.get('_links', {}).get('base')}{result.get('_links', {}).get('webui')}"

@@ -1,8 +1,9 @@
 import os
+import json
 import httpx
 import base64
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -81,24 +82,37 @@ class ConfluenceClient:
                 "body": data["body"]["storage"]["value"]
             }
 
-    async def update_page(self, page_id: str, title: str, content: str, version: Optional[int] = None) -> Dict[str, Any]:
+    @staticmethod
+    def _build_body(content: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """Build the page body block. Dict content is sent as ADF (atlas_doc_format);
+        string content is sent as XHTML storage format."""
+        if isinstance(content, dict):
+            return {
+                "atlas_doc_format": {
+                    "value": json.dumps(content),
+                    "representation": "atlas_doc_format"
+                }
+            }
+        return {
+            "storage": {
+                "value": content,
+                "representation": "storage"
+            }
+        }
+
+    async def update_page(self, page_id: str, title: str, content: Union[str, Dict[str, Any]], version: Optional[int] = None) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             # If version is not provided, fetch the current version first
             if version is None:
                 current_page = await self.get_page(page_id)
                 current_version = current_page["version"]
                 version = current_version + 1
-            
+
             payload = {
                 "id": page_id,
                 "type": "page",
                 "title": title,
-                "body": {
-                    "storage": {
-                        "value": content,
-                        "representation": "storage"
-                    }
-                },
+                "body": self._build_body(content),
                 "version": {
                     "number": version
                 }
@@ -108,9 +122,11 @@ class ConfluenceClient:
                 json=payload,
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            if response.status_code >= 400:
+                raise Exception(f"Confluence API Error {response.status_code}: {response.text}")
             return response.json()
-    async def create_page(self, title: str, content: str, parent_id: Optional[str] = None, space_key: Optional[str] = None) -> Dict[str, Any]:
+
+    async def create_page(self, title: str, content: Union[str, Dict[str, Any]], parent_id: Optional[str] = None, space_key: Optional[str] = None) -> Dict[str, Any]:
         """Creates a new page in Confluence."""
         space = space_key or self.default_space
         if not space:
@@ -121,12 +137,7 @@ class ConfluenceClient:
                 "title": title,
                 "type": "page",
                 "space": {"key": space},
-                "body": {
-                    "storage": {
-                        "value": content,
-                        "representation": "storage"
-                    }
-                }
+                "body": self._build_body(content),
             }
             if parent_id:
                 payload["ancestors"] = [{"id": parent_id}]
