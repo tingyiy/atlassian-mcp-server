@@ -610,15 +610,33 @@ async def view_confluence_page(page_id: str) -> str:
 
 _CONFLUENCE_FORMATS = ("markdown", "storage")
 
+# Signals that content is Confluence storage XHTML rather than markdown.
+# `<ac:` / `<ri:` are Confluence-specific namespaces (100% storage). The
+# structural tags don't appear in normal markdown source — seeing them means
+# the caller is sending storage XHTML through the markdown path, which md2adf
+# would silently encode as literal text.
+_XHTML_STORAGE_SIGNALS = re.compile(
+    r'<ac:|<ri:|</?(?:h[1-6]|table|tbody|thead|tr|td|th)\b',
+    re.IGNORECASE,
+)
+
 
 def _confluence_body(content: str, content_format: str) -> Union[str, dict]:
     """Build the page body for Confluence based on the declared format.
 
     - "markdown" → convert to ADF (sent as atlas_doc_format)
     - "storage"  → pass XHTML through unchanged (sent as storage)
-    Raises ValueError on an unknown format.
+    Raises ValueError on an unknown format, or on markdown content that
+    contains Confluence storage XHTML markers.
     """
     if content_format == "markdown":
+        match = _XHTML_STORAGE_SIGNALS.search(content)
+        if match:
+            raise ValueError(
+                f"content looks like Confluence storage XHTML (found {match.group(0)!r}) "
+                "but content_format is 'markdown'. Pass content_format='storage' to send "
+                "raw XHTML, or convert the content to markdown."
+            )
         return md_to_adf(content)
     if content_format == "storage":
         return content
