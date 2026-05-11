@@ -620,14 +620,21 @@ _XHTML_STORAGE_SIGNALS = re.compile(
     re.IGNORECASE,
 )
 
+# Storage XHTML must contain at least one well-formed opening tag (`<` followed
+# by an ASCII letter). Markdown source has no such tags — sending it as storage
+# results in Confluence escaping the stray `<` chars and storing the whole
+# document as literal text.
+_STORAGE_OPENING_TAG = re.compile(r'<[a-zA-Z]')
+
 
 def _confluence_body(content: str, content_format: str) -> Union[str, dict]:
     """Build the page body for Confluence based on the declared format.
 
     - "markdown" → convert to ADF (sent as atlas_doc_format)
     - "storage"  → pass XHTML through unchanged (sent as storage)
-    Raises ValueError on an unknown format, or on markdown content that
-    contains Confluence storage XHTML markers.
+    Raises ValueError on an unknown format, on markdown content that contains
+    Confluence storage XHTML markers, or on storage content that contains no
+    XHTML tags at all.
     """
     if content_format == "markdown":
         match = _XHTML_STORAGE_SIGNALS.search(content)
@@ -639,6 +646,12 @@ def _confluence_body(content: str, content_format: str) -> Union[str, dict]:
             )
         return md_to_adf(content)
     if content_format == "storage":
+        if not _STORAGE_OPENING_TAG.search(content):
+            raise ValueError(
+                "content_format is 'storage' but content has no XHTML opening tags. "
+                "If this is markdown, pass content_format='markdown' (the default). "
+                "If it is plain text, wrap it in <p>...</p>."
+            )
         return content
     raise ValueError(
         f"Unknown content_format {content_format!r}. Expected one of: {', '.join(_CONFLUENCE_FORMATS)}"
