@@ -192,6 +192,23 @@ class JiraClient:
             }
 
 
+    async def add_attachment(self, issue_key: str, file_path: str) -> Dict[str, Any]:
+        """Uploads a file as an attachment to an issue."""
+        filename = os.path.basename(file_path)
+        headers = {
+            "Authorization": self.auth_header["Authorization"],
+            "X-Atlassian-Token": "no-check",
+        }
+        async with httpx.AsyncClient() as client:
+            with open(file_path, "rb") as f:
+                response = await client.post(
+                    f"{self.base_url}/issue/{issue_key}/attachments",
+                    headers=headers,
+                    files={"file": (filename, f)},
+                )
+            response.raise_for_status()
+            return response.json()
+
     async def update_issue(self, issue_key: str, fields: Dict[str, Any]) -> None:
         """Updates fields of an issue."""
         async with httpx.AsyncClient() as client:

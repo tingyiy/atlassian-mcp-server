@@ -579,6 +579,35 @@ async def jira_download_attachment(attachment_id: str) -> str:
         return f"Error: {e}"
 
 @mcp.tool()
+async def jira_add_attachment(issue_key: str, file_path: str) -> str:
+    """Uploads a file as an attachment to a Jira issue.
+
+    Args:
+        issue_key: The issue key (e.g. "PROJ-123").
+        file_path: Absolute path to the file to upload.
+    """
+    logger.info(f"Tool called: jira_add_attachment(issue_key='{issue_key}', file_path='{file_path}')")
+    if not jira:
+        logger.error("Jira client not initialized")
+        return "Jira client not initialized. Check configuration."
+    file_path = os.path.expanduser(file_path)
+    if not os.path.isfile(file_path):
+        import glob as _glob
+        pattern = file_path.replace(" ", "?")
+        matches = _glob.glob(pattern)
+        if len(matches) == 1:
+            file_path = matches[0]
+        else:
+            return f"Error: File not found at {file_path}"
+    try:
+        result = await jira.add_attachment(issue_key, file_path)
+        filenames = [a.get("filename", "unknown") for a in result] if isinstance(result, list) else [result.get("filename", "unknown")]
+        return f"Attachment(s) uploaded successfully: {', '.join(filenames)}"
+    except Exception as e:
+        logger.error(f"Error uploading attachment to {issue_key}: {e}")
+        return f"Error: {e}"
+
+@mcp.tool()
 async def list_confluence_pages(space_key: str = None, limit: int = 25) -> str:
     """Lists Confluence pages in a space."""
     logger.info(f"Tool called: list_confluence_pages(space_key='{space_key}', limit={limit})")
