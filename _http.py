@@ -22,14 +22,19 @@ _BODY_LIMIT_BYTES = 2000
 
 
 def _truncate(response: httpx.Response) -> str:
-    raw = response.content or b""
-    total = len(raw)
-    if total <= _BODY_LIMIT_BYTES:
-        return response.text.strip()
-    # errors="ignore" drops a character torn in half at the cut rather than
-    # raising or emitting U+FFFD into an error message.
-    head = raw[:_BODY_LIMIT_BYTES].decode(response.encoding or "utf-8", errors="ignore")
-    return head.strip() + f"… [{total} bytes total]"
+    # The bound protects whatever LOGS this message, and Python strings are
+    # emitted as UTF-8 there — so it must be measured on the UTF-8 form of the
+    # decoded text, not on the wire bytes. A 1,500-byte ISO-8859-1 body of `é`
+    # is under the limit on the wire and 3,000 bytes once logged (Copilot, PR
+    # #4). Decode first (httpx honours the response charset), then cut on the
+    # UTF-8 encoding; errors="ignore" drops a character torn at the cut rather
+    # than raising or emitting U+FFFD into an error message.
+    text = (response.text or "").strip()
+    encoded = text.encode("utf-8")
+    if len(encoded) <= _BODY_LIMIT_BYTES:
+        return text
+    head = encoded[:_BODY_LIMIT_BYTES].decode("utf-8", errors="ignore").strip()
+    return head + f"… [{len(response.content or b'')} bytes on the wire]"
 
 
 def raise_for_status_with_body(response: httpx.Response) -> None:
