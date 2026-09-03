@@ -15,8 +15,8 @@ pip install -r requirements.txt
 # Run the MCP server (stdio transport)
 python server.py
 
-# Run unit tests (mention resolution)
-python -m pytest test_mentions.py -v
+# Run unit tests (mention resolution + HTTP error surfacing)
+python -m pytest test_mentions.py test_http_errors.py -v
 
 # Run a single test
 python -m pytest test_mentions.py::TestMentionPlaceholder::test_placeholder_produces_valid_string -v
@@ -33,6 +33,7 @@ Three files form the core:
 - **`server.py`** — FastMCP entry point. Registers all tool functions (`@mcp.tool()`), initializes clients globally, handles mention resolution. All tools are async. Logs to stderr to keep stdout clean for MCP protocol.
 - **`jira_client.py`** — `JiraClient` class wrapping Jira REST API v3 with `httpx.AsyncClient`. Uses `POST /rest/api/3/search/jql` for searches (the GET endpoint is deprecated).
 - **`confluence_client.py`** — `ConfluenceClient` class wrapping Confluence Cloud REST API with `httpx.AsyncClient`. Auto-increments page version on updates if not provided.
+- **`_http.py`** — `raise_for_status_with_body(response)`. **Never call bare `response.raise_for_status()` in either client.** It throws the body away, and for Atlassian the body *is* the diagnosis: a rejected `create_issue` comes back as `{"errors": {"description": "..."}}` naming the exact invalid field. Before this helper a 400 on a long markdown description meant bisecting the input blind (four rounds, 2026-09-02). The exception type stays `httpx.HTTPStatusError`; only the message grows, and `server.py`'s `except Exception as e: return f"Error: {e}"` carries it to the caller unchanged.
 
 ### Mention Resolution (server.py lines 37–195)
 
