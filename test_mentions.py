@@ -141,7 +141,7 @@ class TestMdToAdfWithMentions:
             "displayName": "Ryan Stomel",
         }
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             _md_to_adf_with_mentions(f"@[{account_id}] heads up, deploy is tomorrow.")
         )
 
@@ -152,7 +152,7 @@ class TestMdToAdfWithMentions:
     def test_invalid_account_id_returns_error_string(self):
         self.jira_mock.get_user.return_value = None
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             _md_to_adf_with_mentions("@[bogus-id] hello")
         )
 
@@ -165,7 +165,7 @@ class TestMdToAdfWithMentions:
             {"accountId": "id2", "displayName": "Ryan Scott"},
         ]
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             _md_to_adf_with_mentions("@Ryan check this")
         )
 
@@ -177,7 +177,7 @@ class TestMdToAdfWithMentions:
             {"accountId": "id1", "displayName": "UniqueUser"},
         ]
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             _md_to_adf_with_mentions("@UniqueUser check this")
         )
 
@@ -185,7 +185,7 @@ class TestMdToAdfWithMentions:
         assert _find_mention_node(result, "id1")
 
     def test_no_mentions_passes_through(self):
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             _md_to_adf_with_mentions("plain text, no mentions")
         )
 
