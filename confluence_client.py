@@ -1,6 +1,7 @@
 import os
 import json
 import httpx
+from _http import raise_for_status_with_body
 import base64
 import logging
 from typing import Optional, Dict, Any, List, Union
@@ -54,7 +55,7 @@ class ConfluenceClient:
                 },
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             data = response.json()
             return [
                 {
@@ -73,7 +74,7 @@ class ConfluenceClient:
                 params={"expand": "body.storage,version"},
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             data = response.json()
             return {
                 "id": data["id"],
@@ -159,7 +160,7 @@ class ConfluenceClient:
                 f"{self.api_base}/content/{page_id}",
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
 
     async def search(self, cql: str, limit: int = 25) -> List[Dict[str, Any]]:
         """Searches Confluence using CQL."""
@@ -173,7 +174,7 @@ class ConfluenceClient:
                 },
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             data = response.json()
             return [
                 {
@@ -193,7 +194,7 @@ class ConfluenceClient:
                 params={"expand": "body.storage,version"},
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             data = response.json()
             return [
                 {
@@ -230,7 +231,7 @@ class ConfluenceClient:
                 json=payload,
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json()
 
     async def get_attachment_image(self, page_id: str, filename: str) -> Optional[bytes]:
@@ -243,7 +244,7 @@ class ConfluenceClient:
                 params={"filename": filename, "expand": "version"},
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             data = response.json()
             results = data.get("results", [])
             
@@ -264,6 +265,6 @@ class ConfluenceClient:
 
             # 3. Download the binary content
             img_response = await client.get(full_download_url, headers=self.auth_header)
-            img_response.raise_for_status()
+            raise_for_status_with_body(img_response)
             return img_response.content
 

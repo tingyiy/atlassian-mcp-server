@@ -1,5 +1,6 @@
 import os
 import httpx
+from _http import raise_for_status_with_body
 import base64
 import logging
 from typing import Optional, Dict, Any, List
@@ -41,7 +42,7 @@ class JiraClient:
                 headers=self.auth_header
             )
             logger.debug(f"list_issues status: {response.status_code}")
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             data = response.json()
             
             issues = []
@@ -69,7 +70,7 @@ class JiraClient:
                 f"{self.base_url}/issue/{issue_key}",
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json()
 
     async def get_fields(self) -> List[Dict[str, Any]]:
@@ -79,7 +80,7 @@ class JiraClient:
                 f"{self.base_url}/field",
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json()
 
     async def add_comment(self, issue_key: str, comment_body: Dict[str, Any]) -> Dict[str, Any]:
@@ -91,7 +92,7 @@ class JiraClient:
                 json=payload,
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json()
 
     async def update_comment(self, issue_key: str, comment_id: str, comment_body: Dict[str, Any]) -> Dict[str, Any]:
@@ -103,7 +104,7 @@ class JiraClient:
                 json=payload,
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json()
 
     async def delete_comment(self, issue_key: str, comment_id: str) -> None:
@@ -113,7 +114,7 @@ class JiraClient:
                 f"{self.base_url}/issue/{issue_key}/comment/{comment_id}",
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
 
     async def get_comments(self, issue_key: str) -> List[Dict[str, Any]]:
         """Gets all comments for an issue."""
@@ -122,7 +123,7 @@ class JiraClient:
                 f"{self.base_url}/issue/{issue_key}/comment",
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             data = response.json()
             return [
                 {
@@ -142,7 +143,7 @@ class JiraClient:
                 f"{self.base_url}/issue/{issue_key}/transitions",
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json().get("transitions", [])
 
     async def transition_issue(self, issue_key: str, transition_id: str) -> None:
@@ -158,7 +159,7 @@ class JiraClient:
                 json=payload,
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
 
     async def get_attachment_content(self, attachment_id: str) -> Optional[Dict[str, Any]]:
         """Gets attachment content and metadata by ID.
@@ -170,7 +171,7 @@ class JiraClient:
                 f"{self.base_url}/attachment/{attachment_id}",
                 headers=self.auth_header
             )
-            meta_response.raise_for_status()
+            raise_for_status_with_body(meta_response)
             metadata = meta_response.json()
 
             content_url = metadata.get("content")
@@ -184,7 +185,7 @@ class JiraClient:
                 "Accept": "*/*",
             }
             response = await client.get(content_url, headers=download_headers, follow_redirects=True)
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return {
                 "data": response.content,
                 "filename": metadata.get("filename", f"attachment_{attachment_id}"),
@@ -206,7 +207,7 @@ class JiraClient:
                     headers=headers,
                     files={"file": (filename, f)},
                 )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json()
 
     async def update_issue(self, issue_key: str, fields: Dict[str, Any]) -> None:
@@ -218,7 +219,7 @@ class JiraClient:
                 json=payload,
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
 
     async def get_user(self, account_id: str) -> Optional[Dict[str, Any]]:
         """Get a user by account ID. Returns None if not found."""
@@ -230,7 +231,7 @@ class JiraClient:
             )
             if response.status_code == 404:
                 return None
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json()
 
     async def search_users(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
@@ -241,7 +242,7 @@ class JiraClient:
                 params={"query": query, "maxResults": max_results},
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json()
 
     async def create_issue(self, project_key: str, summary: str, description: Dict[str, Any] = None, issuetype: str = "Task") -> Dict[str, Any]:
@@ -261,5 +262,5 @@ class JiraClient:
                 json=payload,
                 headers=self.auth_header
             )
-            response.raise_for_status()
+            raise_for_status_with_body(response)
             return response.json()
