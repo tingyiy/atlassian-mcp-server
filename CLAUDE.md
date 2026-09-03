@@ -28,7 +28,7 @@ python test_jira_image.py
 
 ## Architecture
 
-Three files form the core:
+Four files form the core:
 
 - **`server.py`** — FastMCP entry point. Registers all tool functions (`@mcp.tool()`), initializes clients globally, handles mention resolution. All tools are async. Logs to stderr to keep stdout clean for MCP protocol.
 - **`jira_client.py`** — `JiraClient` class wrapping Jira REST API v3 with `httpx.AsyncClient`. Uses `POST /rest/api/3/search/jql` for searches (the GET endpoint is deprecated).

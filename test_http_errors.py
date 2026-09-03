@@ -90,3 +90,25 @@ async def test_confluence_search_surfaces_the_body_too(monkeypatch):
     with pytest.raises(httpx.HTTPStatusError) as ei:
         await client.search("bad cql")
     assert "CQL: unexpected token" in str(ei.value), str(ei.value)
+
+
+def test_limit_is_on_encoded_bytes_not_characters():
+    """Copilot, PR #4: slicing characters let a multibyte body run several
+    times past the promised 2 KB while the suffix still said 'bytes'."""
+    emoji_body = "🔥" * 1500          # 1500 chars, 6000 bytes in UTF-8
+    with pytest.raises(httpx.HTTPStatusError) as ei:
+        raise_for_status_with_body(_resp(500, emoji_body))
+    msg = str(ei.value)
+    payload = msg.split("Response body: ", 1)[1]
+    head = payload.split("… [")[0]
+    assert len(head.encode("utf-8")) <= 2000, len(head.encode("utf-8"))
+    assert "[6000 bytes total]" in msg, msg
+    assert "�" not in msg, "a torn character must be dropped, not replaced"
+
+
+def test_short_multibyte_body_is_not_truncated():
+    body = "描述字段无效 — 需要 ADF 文档"    # well under 2 KB in bytes
+    with pytest.raises(httpx.HTTPStatusError) as ei:
+        raise_for_status_with_body(_resp(400, body))
+    assert body in str(ei.value)
+    assert "bytes total" not in str(ei.value)
