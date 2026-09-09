@@ -15,8 +15,8 @@ pip install -r requirements.txt
 # Run the MCP server (stdio transport)
 python server.py
 
-# Run unit tests (mention resolution + HTTP error surfacing)
-python -m pytest test_mentions.py test_http_errors.py -v
+# Run unit tests (mention resolution + HTTP error surfacing + ADF mark sanitizing)
+python -m pytest test_mentions.py test_http_errors.py test_adf_marks.py -v
 
 # Run a single test
 python -m pytest test_mentions.py::TestMentionPlaceholder::test_placeholder_produces_valid_string -v
@@ -35,7 +35,7 @@ Four files form the core:
 - **`confluence_client.py`** — `ConfluenceClient` class wrapping Confluence Cloud REST API with `httpx.AsyncClient`. Auto-increments page version on updates if not provided.
 - **`_http.py`** — `raise_for_status_with_body(response)`. **Never call bare `response.raise_for_status()` in either client.** It throws the body away, and for Atlassian the body *is* the diagnosis: a rejected `create_issue` comes back as `{"errors": {"description": "..."}}` naming the exact invalid field. Before this helper a 400 on a long markdown description meant bisecting the input blind (four rounds, 2026-09-02). The exception type stays `httpx.HTTPStatusError`; only the message grows, and `server.py`'s `except Exception as e: return f"Error: {e}"` carries it to the caller unchanged.
 
-### Mention Resolution (server.py lines 37–195)
+### Mention Resolution (server.py lines 114–272)
 
 The most complex subsystem. Three-phase pipeline:
 
@@ -43,12 +43,36 @@ The most complex subsystem. Three-phase pipeline:
 2. **Disambiguate** — If any `@username` matches multiple users, returns an error string (comment is NOT posted) asking the caller to retry with `@[accountId]`.
 3. **Placeholder swap** — Replaces mentions with `{{{MENTION:key}}}` placeholders before ADF conversion (to prevent mistune from mangling bracket syntax), then walks the ADF tree to inject mention nodes. Preserves text formatting marks during splitting.
 
+### ADF Mark Sanitizing (server.py)
+
+`_sanitize_adf_marks()` walks the converted ADF and drops mark combinations the
+schema rejects. ADF forbids `code` on the same text node as `strong`, `em`,
+`strike`, `underline`, `subsup` or `textColor`, but md2adf flattens nested inline
+markup into a mark *list* — so bold-wrapped inline code emits
+`marks: [strong, code]` on one text node, and
+Jira rejects the entire payload with an opaque `400 INVALID_INPUT` naming no
+construct (SCRUM-1333). Mark order is irrelevant, and `code` + `link` is legal,
+so link is deliberately excluded from the strip set.
+
+When the pair appears, **`code` wins and the formatting marks are dropped** —
+backticks are the more specific thing the author asked for, and bold code is not
+representable in ADF at all, so there is no round-trip to preserve. Run it on
+every path that hands ADF to Atlassian: both returns of
+`_md_to_adf_with_mentions()` and the markdown branch of `_confluence_body()`.
+It runs *after* mention injection, so mention nodes are already in place.
+
+`_wiki_markup_warning()` covers the related defect: the server accepts markdown
+only, and Jira/Confluence wiki markup (`h2. Heading`, `{code}`, `{panel}`) falls
+through as literal text. It cannot be rejected safely — that text is valid input
+— so the markdown-accepting Jira tools append a warning to their success string.
+
 ### Key Patterns
 
 - All I/O is async (`httpx.AsyncClient`, `async def` tools)
 - Auth: Basic Auth with email + API token, configured via `.env`
 - Clients can be `None` if config is missing — server still starts but tools return error strings
 - Jira tools that accept descriptions/comments run markdown through `_md_to_adf_with_mentions()` which returns either an ADF dict (success) or a string (disambiguation/error)
+- Never hand raw `md_to_adf()` output to Atlassian — pass it through `_sanitize_adf_marks()` first (see above)
 - Confluence tools pass raw content (XHTML storage format) directly — no ADF conversion
 
 ## Environment Variables
