@@ -40,6 +40,76 @@ _MENTION_ID_RE = re.compile(r'@\[([^\]]+)\]')
 _MENTION_PLACEHOLDER = '{{{MENTION:%s}}}'
 _PLACEHOLDER_RE = re.compile(r'\{\{\{MENTION:([^}]+)\}\}\}')
 
+# ADF forbids the `code` mark on the same text node as any of these formatting
+# marks. md2adf flattens nested inline markup into a mark LIST, so "**a `b` c**"
+# emits marks [strong, code] and Jira rejects the whole payload with an opaque
+# 400 INVALID_INPUT naming no construct (SCRUM-1333). Mark order is irrelevant;
+# `link` composes with `code` fine and is deliberately absent from this set.
+_CODE_INCOMPATIBLE_MARKS = frozenset({
+    "strong", "em", "strike", "underline", "subsup", "textColor",
+})
+
+
+def _sanitize_adf_marks(node):
+    """Strip mark combinations ADF rejects, in place.
+
+    On a text node carrying `code` plus any formatting mark, `code` wins and the
+    others are dropped: backticks are the more specific thing the author asked
+    for, and bold code is not representable in ADF at all, so there is nothing
+    to round-trip to. Returns the number of nodes that were changed.
+    """
+    fixed = 0
+    if isinstance(node, list):
+        for child in node:
+            fixed += _sanitize_adf_marks(child)
+        return fixed
+    if not isinstance(node, dict):
+        return 0
+
+    marks = node.get("marks")
+    if isinstance(marks, list):
+        types = {m.get("type") for m in marks if isinstance(m, dict)}
+        if "code" in types and types & _CODE_INCOMPATIBLE_MARKS:
+            node["marks"] = [
+                m for m in marks
+                if not (isinstance(m, dict) and m.get("type") in _CODE_INCOMPATIBLE_MARKS)
+            ]
+            fixed += 1
+
+    content = node.get("content")
+    if isinstance(content, list):
+        fixed += _sanitize_adf_marks(content)
+    return fixed
+
+
+# Confluence/Jira wiki markup that this server does NOT understand. It accepts
+# markdown only, and anything else falls through md2adf as literal text -- an
+# "h2. Repro" heading renders as the characters "h2. Repro" on the page, which
+# is easy to ship and hard to notice (SCRUM-1333, second defect).
+_WIKI_MARKUP_SIGNALS = re.compile(
+    r'^\s*h[1-6]\.\s'          # h2. Heading
+    r'|\{code(?::[^}]*)?\}'     # {code} / {code:python}
+    r'|\{noformat\}'
+    r'|\{quote\}'
+    r'|\{panel(?::[^}]*)?\}'
+    r'|\{color:[^}]*\}',
+    re.MULTILINE,
+)
+
+
+def _wiki_markup_warning(markdown: str) -> str:
+    """Return a caller-facing warning if the text looks like wiki markup, else ''."""
+    match = _WIKI_MARKUP_SIGNALS.search(markdown or "")
+    if not match:
+        return ""
+    found = match.group(0).strip()
+    logger.warning(f"Content contains wiki markup {found!r}; this server accepts markdown only")
+    return (
+        f" Warning: found wiki markup {found!r}. This server accepts markdown only, "
+        "so that text was published literally rather than rendered. Use markdown "
+        "(## Heading, ```code fences```) and re-send if it looks wrong."
+    )
+
 
 async def _md_to_adf_with_mentions(markdown: str) -> dict | str:
     """Convert markdown to ADF, resolving @mentions to Jira users.
@@ -52,7 +122,9 @@ async def _md_to_adf_with_mentions(markdown: str) -> dict | str:
     @username matched multiple users (comment is NOT posted).
     """
     if not jira:
-        return md_to_adf(markdown)
+        adf = md_to_adf(markdown)
+        _sanitize_adf_marks(adf)
+        return adf
 
     # Phase 1: resolve all mentions
     resolved = {}   # key -> {accountId, displayName}
@@ -135,6 +207,11 @@ async def _md_to_adf_with_mentions(markdown: str) -> dict | str:
     # Phase 5: walk ADF tree and swap placeholders for mention nodes
     if resolved:
         _inject_mentions(adf, resolved)
+
+    # Phase 6: drop mark combinations ADF would reject (see _sanitize_adf_marks)
+    fixed = _sanitize_adf_marks(adf)
+    if fixed:
+        logger.info(f"Sanitized {fixed} text node(s) carrying an illegal code+formatting mark pair")
     return adf
 
 
@@ -360,7 +437,7 @@ async def jira_add_comment(issue_key: str, comment: str) -> str:
         result = await jira.add_comment(issue_key, adf)
         comment_id = result.get('id')
         logger.info(f"Comment added to {issue_key}, ID: {comment_id}")
-        return f"Comment added. ID: {comment_id}"
+        return f"Comment added. ID: {comment_id}" + _wiki_markup_warning(comment)
     except Exception as e:
         logger.error(f"Error adding comment to {issue_key}: {e}")
         return f"Error: {e}"
@@ -391,7 +468,7 @@ async def jira_edit_comment(issue_key: str, comment_id: str, comment: str) -> st
             return adf  # disambiguation needed
         result = await jira.update_comment(issue_key, comment_id, adf)
         logger.info(f"Comment {comment_id} updated on {issue_key}")
-        return f"Comment {comment_id} updated."
+        return f"Comment {comment_id} updated." + _wiki_markup_warning(comment)
     except Exception as e:
         logger.error(f"Error editing comment {comment_id} on {issue_key}: {e}")
         return f"Error: {e}"
@@ -502,7 +579,10 @@ async def jira_update_issue(issue_key: str, summary: str = None, description: st
     try:
         await jira.update_issue(issue_key, fields)
         logger.info(f"Issue {issue_key} updated")
-        return f"Issue {issue_key} updated."
+        warning = _wiki_markup_warning(description or "")
+        for markdown in (rich_text_fields or {}).values():
+            warning += _wiki_markup_warning(markdown)
+        return f"Issue {issue_key} updated." + warning
     except Exception as e:
         logger.error(f"Error updating issue {issue_key}: {e}")
         return f"Error: {e}"
@@ -531,7 +611,8 @@ async def jira_create_issue(project_key: str, summary: str, description: str = N
                 return adf_desc  # disambiguation needed
         result = await jira.create_issue(project_key, summary, adf_desc, issuetype)
         logger.info(f"Issue created: {result.get('key')}")
-        return f"Issue created successfully. Key: {result.get('key')}, ID: {result.get('id')}"
+        return (f"Issue created successfully. Key: {result.get('key')}, ID: {result.get('id')}"
+                + _wiki_markup_warning(description or ""))
     except Exception as e:
         logger.error(f"Error creating issue: {e}")
         return f"Error: {e}"
@@ -673,7 +754,9 @@ def _confluence_body(content: str, content_format: str) -> Union[str, dict]:
                 "but content_format is 'markdown'. Pass content_format='storage' to send "
                 "raw XHTML, or convert the content to markdown."
             )
-        return md_to_adf(content)
+        adf = md_to_adf(content)
+        _sanitize_adf_marks(adf)
+        return adf
     if content_format == "storage":
         if not _STORAGE_OPENING_TAG.search(content):
             raise ValueError(

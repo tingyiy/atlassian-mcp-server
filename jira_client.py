@@ -1,3 +1,4 @@
+import mimetypes
 import os
 import httpx
 from _http import raise_for_status_with_body
@@ -196,6 +197,7 @@ class JiraClient:
     async def add_attachment(self, issue_key: str, file_path: str) -> Dict[str, Any]:
         """Uploads a file as an attachment to an issue."""
         filename = os.path.basename(file_path)
+        content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
         headers = {
             "Authorization": self.auth_header["Authorization"],
             "X-Atlassian-Token": "no-check",
@@ -205,7 +207,7 @@ class JiraClient:
                 response = await client.post(
                     f"{self.base_url}/issue/{issue_key}/attachments",
                     headers=headers,
-                    files={"file": (filename, f)},
+                    files={"file": (filename, f, content_type)},
                 )
             raise_for_status_with_body(response)
             return response.json()
